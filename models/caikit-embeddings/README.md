@@ -8,7 +8,7 @@ This directory contains deployment configuration for self-hosted embedding and r
 
 | Model | Type | Parameters | Dimensions | Max Tokens | Endpoint |
 |-------|------|------------|------------|------------|----------|
-| `ibm-granite/granite-embedding-278m-multilingual` | Embedding | 278M | 768 | 512 | `https://granite-embedding-caikit-embeddings.apps.cluster-mqwwr.mqwwr.sandbox1259.opentlc.com` |
+| `ibm-granite/granite-embedding-278m-multilingual` | Embedding | 278M | 768 | 512 | `https://granite-embedding-278m-caikit-embeddings.apps.cluster-mqwwr.mqwwr.sandbox1259.opentlc.com` |
 | `sentence-transformers/all-MiniLM-L6-v2` | Embedding | 22.7M | 384 | 256 | `https://all-minilm-l6-v2-caikit-embeddings.apps.cluster-mqwwr.mqwwr.sandbox1259.opentlc.com` |
 | `cross-encoder/ms-marco-MiniLM-L12-v2` | Cross-Encoder | 33.4M | N/A | 512 | `https://ms-marco-reranker-caikit-embeddings.apps.cluster-mqwwr.mqwwr.sandbox1259.opentlc.com` |
 
@@ -237,9 +237,9 @@ oc apply -f manifests/reranker/service.yaml -n caikit-embeddings
 ### Embedding Endpoint (`/api/v1/task/embedding`)
 
 ```bash
-curl -X POST "https://granite-embedding-caikit-embeddings.apps.cluster-mqwwr.mqwwr.sandbox1259.opentlc.com/api/v1/task/embedding" \
+curl -X POST "https://granite-embedding-278m-caikit-embeddings.apps.cluster-mqwwr.mqwwr.sandbox1259.opentlc.com/api/v1/task/embedding" \
   -H "Content-Type: application/json" \
-  -d '{"model_id": "granite-embedding", "inputs": "Your text here"}'
+  -d '{"model_id": "granite-embedding-278m", "inputs": "Your text here"}'
 ```
 
 ### Response Format
@@ -264,12 +264,12 @@ curl -X POST "https://granite-embedding-caikit-embeddings.apps.cluster-mqwwr.mqw
 ```python
 import requests
 
-EMBEDDING_URL = "https://granite-embedding-caikit-embeddings.apps.cluster-mqwwr.mqwwr.sandbox1259.opentlc.com/api/v1/task/embedding"
+EMBEDDING_URL = "https://granite-embedding-278m-caikit-embeddings.apps.cluster-mqwwr.mqwwr.sandbox1259.opentlc.com/api/v1/task/embedding"
 
 def get_embedding(text: str) -> list[float]:
     response = requests.post(
         EMBEDDING_URL,
-        json={"model_id": "granite-embedding", "inputs": text},
+        json={"model_id": "granite-embedding-278m", "inputs": text},
         verify=False
     )
     return response.json()["result"]["data"]["values"]

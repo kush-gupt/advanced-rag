@@ -60,20 +60,48 @@ This guide walks you through deploying the complete Advanced RAG pipeline to Ope
   - At least 32GB RAM available for services
 - `oc` CLI logged into your cluster
 - SSH access to a Linux x86_64 build host (for Mac users building containers)
-- API keys: OpenAI (or compatible), Cohere (for reranking)
+- API keys: OpenAI (or compatible), Cohere (for reranking) - *only if using cloud providers*
 
 ### Deployment Sequence
 
-1. **Namespaces & Secrets** - Create namespaces and configure API keys
-2. **Models** - Deploy embedding, reranking, and LLM models
-3. **Database** - Choose and deploy a vector store (Milvus recommended)
-4. **Docling** - Deploy document conversion service
-5. **Services** - Build and deploy the microservices
-6. **MCP Server** - Deploy the retrieval MCP server for agent integration
+1. **Configuration** - Update `services/config/rag-config.yaml` for your cluster
+2. **Namespaces & Secrets** - Create namespaces and configure API keys
+3. **Models** - Deploy embedding, reranking, and LLM models
+4. **Database** - Choose and deploy a vector store (Milvus recommended)
+5. **Docling** - Deploy document conversion service
+6. **Services** - Build and deploy the microservices
+7. **MCP Server** - Deploy the retrieval MCP server for agent integration
 
 ---
 
-### Step 1: Create Namespaces and Secrets
+### Step 1: Configure RAG Pipeline
+
+Before deploying, update the configuration file to match your OpenShift cluster.
+
+Edit `services/config/rag-config.yaml`:
+
+1. **Update cluster URLs**: Replace the default cluster domain (`*.apps.cluster-mqwwr.mqwwr.sandbox1259.opentlc.com`) with your cluster's domain in the `base_url` fields for:
+   - `caikit-granite` (embedding)
+   - `caikit-minilm` (embedding, optional)
+   - `caikit-reranker` (reranking)
+
+2. **Choose providers**: The defaults use self-hosted Caikit models:
+   - `embedding.active: caikit-granite` (768 dimensions)
+   - `rerank.active: caikit-reranker`
+
+   To use cloud APIs instead, change to `openai`, `cohere`, etc. and ensure the corresponding API keys are set.
+
+3. **Environment variable overrides**: You can override providers at runtime:
+   ```bash
+   export RAG_EMBEDDING_PROVIDER=openai
+   export RAG_RERANK_PROVIDER=cohere
+   ```
+
+See the config file comments for all available providers and their requirements.
+
+---
+
+### Step 2: Create Namespaces and Secrets
 
 Create the namespaces and configure secrets needed by the services.
 
@@ -100,11 +128,11 @@ oc create secret generic model-storage-credentials \
 
 ---
 
-### Step 2: Deploy Models
+### Step 3: Deploy Models
 
 The RAG pipeline requires embedding models and optionally an LLM for plan generation and a VLM for image descriptions.
 
-#### 2.1 Caikit Embeddings & Reranker
+#### 3.1 Caikit Embeddings & Reranker
 
 Deploy embedding and reranking models using OpenShift AI with the Caikit runtime:
 
@@ -127,7 +155,7 @@ oc wait --for=condition=Ready pods -l app=granite-embedding -n caikit-embeddings
 
 See [models/caikit-embeddings/README.md](models/caikit-embeddings/README.md) for detailed instructions and API usage.
 
-#### 2.2 GPT-OSS LLM (Optional)
+#### 3.2 GPT-OSS LLM (Optional)
 
 For self-hosted LLM plan generation instead of OpenAI:
 
@@ -139,7 +167,7 @@ oc wait --for=condition=Ready pods -l app=gpt-oss-20b-rhaiis -n gpt-oss --timeou
 
 See [models/gpt-oss/README.md](models/gpt-oss/README.md) for setup details.
 
-#### 2.3 Granite Vision (Optional - Required for Image Descriptions)
+#### 3.3 Granite Vision (Optional - Required for Image Descriptions)
 
 If you want docling-serve to generate descriptions for images in PDFs, deploy this **before** deploying docling-serve with the GPU overlay:
 
@@ -153,7 +181,7 @@ See [models/granite-vision/README.md](models/granite-vision/README.md) for detai
 
 ---
 
-### Step 3: Deploy Vector Database
+### Step 4: Deploy Vector Database
 
 Choose one of the supported vector stores. **Milvus is recommended** for its native hybrid search support.
 
@@ -195,7 +223,7 @@ See [databases/meilisearch/README.md](databases/meilisearch/README.md) for detai
 
 ---
 
-### Step 4: Deploy Docling-Serve
+### Step 5: Deploy Docling-Serve
 
 Document conversion service for PDF to Markdown/JSON.
 
@@ -208,7 +236,7 @@ oc wait --for=condition=Available deployment/docling-serve -n docling-serve --ti
 
 #### GPU Deployment with VLM (Production)
 
-For automatic image descriptions, deploy the GPU overlay **after** deploying granite-vision (Step 2.3):
+For automatic image descriptions, deploy the GPU overlay **after** deploying granite-vision (Step 3.3):
 
 ```bash
 oc apply -k docling-serve/manifests/overlays/gpu
@@ -219,11 +247,11 @@ See [docling-serve/README.md](docling-serve/README.md) for configuration and usa
 
 ---
 
-### Step 5: Build and Deploy Microservices
+### Step 6: Build and Deploy Microservices
 
 The microservices handle chunking, embedding, reranking, evaluation, and vector operations.
 
-#### 5.1 Build the Go Chunker Service
+#### 6.1 Build the Go Chunker Service
 
 The chunker service is written in Go and needs to be compiled:
 
@@ -233,7 +261,7 @@ go build -o ../../bin/chunker ./cmd/chunker
 cd ../..
 ```
 
-#### 5.2 Build and Deploy All Services
+#### 6.2 Build and Deploy All Services
 
 Using the Makefile (recommended):
 
@@ -267,7 +295,7 @@ make deploy-rerank
 make deploy-evaluator
 ```
 
-#### 5.3 Verify Deployment
+#### 6.3 Verify Deployment
 
 ```bash
 # Check all pods are running
@@ -285,7 +313,7 @@ See [services/README.md](services/README.md) for detailed API documentation and 
 
 ---
 
-### Step 6: Deploy Retrieval MCP Server
+### Step 7: Deploy Retrieval MCP Server
 
 The MCP server exposes RAG capabilities to AI agents.
 
@@ -317,7 +345,7 @@ See [retrieval-mcp/README.md](retrieval-mcp/README.md) for all available tools a
 
 ---
 
-### Step 7: Test the Pipeline
+### Step 8: Test the Pipeline
 
 Use the example Kubeflow pipeline to verify everything works:
 

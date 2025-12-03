@@ -1,5 +1,11 @@
 # RAG Pipeline Configuration
+# =============================================================================
 # This file configures embedding and reranking providers for the pipeline.
+#
+# IMPORTANT: Before deploying, update the base_url values to match your
+# OpenShift cluster's routes. The default configuration uses self-hosted
+# Caikit models on OpenShift (caikit-granite for embeddings, caikit-reranker
+# for reranking).
 #
 # Provider Selection:
 #   Set 'active' under embedding/rerank to choose the provider.
@@ -8,11 +14,53 @@
 # API Keys:
 #   Keys are read from environment variables specified in api_key_env.
 #   Never commit actual API keys to this file.
+#
+# Updating URLs for Your Cluster:
+#   Replace the cluster-specific URLs (e.g., *.apps.cluster-mqwwr.mqwwr.sandbox1259.opentlc.com)
+#   with your cluster's domain. For example:
+#     https://granite-embedding-278m-caikit-embeddings.apps.YOUR-CLUSTER.com
+#
+# =============================================================================
 
 embedding:
-  active: openai
+  # Default: Self-hosted Granite embedding model via Caikit
+  # Alternatives: openai, openai-large, caikit-minilm, cohere, vllm-local
+  active: caikit-granite
 
   providers:
+    # ==========================================================================
+    # Self-Hosted Models (Recommended for Production)
+    # ==========================================================================
+
+    # Caikit NLP - Granite Embedding (IBM/Red Hat) [DEFAULT]
+    # 768 dimensions, good balance of quality and performance
+    # Update base_url for your cluster before deployment
+    caikit-granite:
+      type: caikit
+      base_url: https://granite-embedding-278m-caikit-embeddings.apps.cluster-mqwwr.mqwwr.sandbox1259.opentlc.com
+      model: granite-embedding-278m
+      dimensions: 768
+      max_batch: 32
+      # API: POST /api/v1/task/embedding
+      # Body: {"model_id": "granite-embedding-278m", "inputs": "text"}
+
+    # Caikit NLP - MiniLM (smaller, faster)
+    # 384 dimensions, good for dev/test or when speed is critical
+    # Update base_url for your cluster before deployment
+    caikit-minilm:
+      type: caikit
+      base_url: https://all-minilm-l6-v2-caikit-embeddings.apps.cluster-mqwwr.mqwwr.sandbox1259.opentlc.com
+      model: all-minilm-l6-v2
+      dimensions: 384
+      max_batch: 64
+      # API: POST /api/v1/task/embedding
+      # Body: {"model_id": "all-minilm-l6-v2", "inputs": "text"}
+
+    # ==========================================================================
+    # Cloud API Providers (Requires API Keys)
+    # ==========================================================================
+
+    # OpenAI text-embedding-3-small
     openai:
       type: openai-compatible
       base_url: https://api.openai.com/v1
@@ -22,6 +70,7 @@ embedding:
       max_batch: 64
       max_tokens_per_input: 8191
 
+    # OpenAI text-embedding-3-large (higher quality, higher cost)
     openai-large:
       type: openai-compatible
       base_url: https://api.openai.com/v1
@@ -30,33 +79,6 @@ embedding:
       dimensions: 3072
       max_batch: 64
       max_tokens_per_input: 8191
-
-    # Local vLLM deployment
-    vllm-local:
-      type: openai-compatible
-      base_url: http://localhost:8000/v1
-      api_key_env: VLLM_API_KEY
-      model: BAAI/bge-m3
-      dimensions: 1024
-      max_batch: 32
-
-    # OpenShift deployed embedding model
-    openshift-embedding:
-      type: openai-compatible
-      base_url: http://embedding-model.ai-models.svc.cluster.local:8000/v1
-      api_key_env: EMBEDDING_API_KEY
-      model: BAAI/bge-large-en-v1.5
-      dimensions: 1024
-      max_batch: 32
-
-    # Text Embeddings Inference (TEI) on OpenShift
-    tei-openshift:
-      type: openai-compatible
-      base_url: http://tei-service.ai-apps.svc.cluster.local:8080/v1
-      api_key_env: TEI_API_KEY
-      model: BAAI/bge-large-en-v1.5
-      dimensions: 1024
-      max_batch: 32
 
     # Cohere embeddings
     cohere:
@@ -75,26 +97,63 @@ embedding:
       model: openai/text-embedding-3-small
       dimensions: 1536
 
-    # Caikit NLP - Granite Embedding (IBM/Red Hat)
-    caikit-granite:
-      type: caikit
-      base_url: https://granite-embedding-278m-caikit-embeddings.apps.cluster-mqwwr.mqwwr.sandbox1259.opentlc.com
-      model: granite-embedding-278m
-      dimensions: 768
+    # ==========================================================================
+    # Local Development / Custom Deployments
+    # ==========================================================================
+
+    # Local vLLM deployment
+    vllm-local:
+      type: openai-compatible
+      base_url: http://localhost:8000/v1
+      api_key_env: VLLM_API_KEY
+      model: BAAI/bge-m3
+      dimensions: 1024
       max_batch: 32
 
-    # Caikit NLP - MiniLM (smaller, faster)
-    caikit-minilm:
-      type: caikit
-      base_url: https://all-minilm-l6-v2-caikit-embeddings.apps.cluster-mqwwr.mqwwr.sandbox1259.opentlc.com
-      model: all-minilm-l6-v2
-      dimensions: 384
-      max_batch: 64
+    # Generic OpenShift deployed embedding model (customize for your deployment)
+    openshift-embedding:
+      type: openai-compatible
+      base_url: http://embedding-model.ai-models.svc.cluster.local:8000/v1
+      api_key_env: EMBEDDING_API_KEY
+      model: BAAI/bge-large-en-v1.5
+      dimensions: 1024
+      max_batch: 32
+
+    # Text Embeddings Inference (TEI) on OpenShift
+    tei-openshift:
+      type: openai-compatible
+      base_url: http://tei-service.ai-apps.svc.cluster.local:8080/v1
+      api_key_env: TEI_API_KEY
+      model: BAAI/bge-large-en-v1.5
+      dimensions: 1024
+      max_batch: 32
 
 rerank:
-  active: cohere
+  # Default: Self-hosted MS-MARCO reranker via Caikit
+  # Alternatives: cohere, cohere-multilingual, jina, none (to disable)
+  active: caikit-reranker
 
   providers:
+    # ==========================================================================
+    # Self-Hosted Models (Recommended for Production)
+    # ==========================================================================
+
+    # Caikit NLP - MS-MARCO Reranker (IBM/Red Hat) [DEFAULT]
+    # Cross-encoder reranker, excellent for improving search precision
+    # Update base_url for your cluster before deployment
+    caikit-reranker:
+      type: caikit
+      base_url: https://ms-marco-reranker-caikit-embeddings.apps.cluster-mqwwr.mqwwr.sandbox1259.opentlc.com
+      model: ms-marco-reranker
+      max_documents: 100
+      # API: POST /api/v1/task/rerank
+      # Body: {"model_id": "ms-marco-reranker", "inputs": {"query": "...", "documents": [{"text": "..."}]}}
+
+    # ==========================================================================
+    # Cloud API Providers (Requires API Keys)
+    # ==========================================================================
+
+    # Cohere reranker (English)
     cohere:
       type: cohere
       base_url: https://api.cohere.com/v1
@@ -102,6 +161,7 @@ rerank:
       model: rerank-english-v3.0
       max_documents: 1000
 
+    # Cohere reranker (Multilingual)
     cohere-multilingual:
       type: cohere
       base_url: https://api.cohere.com/v1
@@ -117,6 +177,10 @@ rerank:
       model: jina-reranker-v2-base-multilingual
       max_documents: 1000
 
+    # ==========================================================================
+    # Local Development / Custom Deployments
+    # ==========================================================================
+
     # Local vLLM reranker deployment
     vllm-rerank:
       type: openai-compatible
@@ -125,7 +189,7 @@ rerank:
       model: BAAI/bge-reranker-v2-m3
       max_documents: 100
 
-    # OpenShift deployed rerank model
+    # Generic OpenShift deployed rerank model (customize for your deployment)
     openshift-rerank:
       type: openai-compatible
       base_url: http://rerank-model.ai-models.svc.cluster.local:8000/v1
@@ -133,18 +197,13 @@ rerank:
       model: BAAI/bge-reranker-v2-m3
       max_documents: 100
 
-    # Caikit NLP - MS-MARCO Reranker (IBM/Red Hat)
-    caikit-reranker:
-      type: caikit
-      base_url: https://ms-marco-reranker-caikit-embeddings.apps.cluster-mqwwr.mqwwr.sandbox1259.opentlc.com
-      model: ms-marco-reranker
-      max_documents: 100
-
-    # Disable reranking
+    # Disable reranking (passthrough - returns results unchanged)
     none:
       type: passthrough
 
+# =============================================================================
 # Optional: Microservice URLs
+# =============================================================================
 # If set, embed_texts() and rerank_documents() will call these services first
 # before falling back to direct provider calls.
 services:
