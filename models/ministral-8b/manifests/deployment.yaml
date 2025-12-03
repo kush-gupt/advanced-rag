@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ministral-8b
+  namespace: ministral
+  labels:
+    app: ministral-8b
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ministral-8b
+  template:
+    metadata:
+      labels:
+        app: ministral-8b
+    spec:
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.6.6
+          command:
+            - python3
+            - -m
+            - vllm.entrypoints.openai.api_server
+          args:
+            # Download model directly from HuggingFace
+            - --model=mistralai/Ministral-8B-Instruct-2410
+            - --served-model-name=ministral-8b
+            - --port=8080
+            # Mistral-specific tokenizer/config flags
+            - --tokenizer-mode=mistral
+            - --config-format=mistral
+            - --load-format=mistral
+            # Tool calling support
+            - --enable-auto-tool-choice
+            - --tool-call-parser=mistral
+            # Limit context to fit in A10G (24GB)
+            - --max-model-len=16384
+            - --trust-remote-code
+          env:
+            # Redirect all cache directories to /tmp (OpenShift random UID)
+            - name: HF_HOME
+              value: "/tmp/hf"
+            - name: TRANSFORMERS_CACHE
+              value: "/tmp/transformers"
+            - name: VLLM_CACHE_DIR
+              value: "/tmp/vllm"
+            - name: XDG_CACHE_HOME
+              value: "/tmp"
+            - name: HOME
+              value: "/tmp"
+            # HuggingFace token for model access (optional)
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: token
+                  optional: true
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          resources:
+            requests:
+              cpu: "4"
+              memory: 24Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "8"
+              memory: 32Gi
+              nvidia.com/gpu: "1"
+          # Startup probe - model loading can take 5-10 minutes
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30

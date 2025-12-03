@@ -1,0 +1,16 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: ministral-8b
+  namespace: ministral
+  labels:
+    app: ministral-8b
+spec:
+  to:
+    kind: Service
+    name: ministral-8b
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

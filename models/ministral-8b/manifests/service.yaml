@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ministral-8b
+  namespace: ministral
+  labels:
+    app: ministral-8b
+spec:
+  selector:
+    app: ministral-8b
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+  type: ClusterIP
