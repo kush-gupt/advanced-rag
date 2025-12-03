@@ -1,0 +1,41 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gpt-oss-model-download
+  namespace: gpt-oss
+spec:
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: download
+          image: quay.io/modh/kserve-storage-initializer@sha256:670a34b21ca339b0d27cfbb23bacfd86bd71118af1c47506070feb12078bd8c1
+          args:
+            - s3://model-storage-fd83a868-2120-4822-90af-e998f8203992/gpt-oss-models/gpt-oss-20b
+            - /mnt/models
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: aws-connection-model-storage
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aws-connection-model-storage
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: S3_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: aws-connection-model-storage
+                  key: AWS_S3_ENDPOINT
+            - name: awsAnonymousCredential
+              value: "false"
+          volumeMounts:
+            - name: model-storage
+              mountPath: /mnt/models
+      volumes:
+        - name: model-storage
+          persistentVolumeClaim:
+            claimName: gpt-oss-model-cache

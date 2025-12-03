@@ -20,8 +20,8 @@ spec:
       autoSelect: true
   containers:
     - name: kserve-container
-      # Original smaller vLLM image - without --served-model-name (defaults to model path)
-      image: quay.io/vllm/vllm-cuda@sha256:ff91afa6340e520c72837d30a2c2afa895f76099fe1be06927b4a162eca9e103
+      # vLLM v0.11.2 with --served-model-name fix (PR #23528)
+      image: vllm/vllm-openai:v0.11.2
       command:
         - python
         - -m
@@ -29,6 +29,7 @@ spec:
       args:
         - --port=8080
         - --model=/mnt/models
+        - --served-model-name=gpt-oss-20b
         - --trust-remote-code
       env:
         # Point to the tiktoken file bundled in the model car

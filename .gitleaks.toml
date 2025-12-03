@@ -1,0 +1,22 @@
+# Gitleaks configuration for managing false positives
+# https://github.com/gitleaks/gitleaks
+
+[allowlist]
+  description = "Project-specific allowlist for false positives"
+
+  # Ignore based on line content (placeholder values in documentation)
+  regexes = [
+    '''changeme-in-production''',  # Meilisearch placeholder in docs
+    '''your-openai-key''',         # README placeholder
+    '''your-cohere-key''',         # README placeholder
+    '''your-access-key''',         # README placeholder
+    '''your-secret-key''',         # README placeholder
+    '''your-api-key''',            # README placeholder
+    '''YOUR_.*_HERE''',            # Generic placeholder pattern
+    '''REPLACE_WITH_YOUR''',       # Generic placeholder pattern
+  ]
+
+  # Ignore based on file paths
+  paths = [
+    '''\.gitleaks\.toml$''',       # This file
+  ]

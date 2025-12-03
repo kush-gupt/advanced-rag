@@ -1,0 +1,38 @@
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: gpt-oss-20b-rhaiis
+  namespace: gpt-oss
+  annotations:
+    openshift.io/display-name: gpt-oss-20b-rhaiis
+    security.opendatahub.io/enable-auth: "true"
+    serving.kserve.io/deploymentMode: RawDeployment
+  labels:
+    networking.kserve.io/visibility: exposed
+    opendatahub.io/dashboard: "true"
+spec:
+  predictor:
+    maxReplicas: 1
+    minReplicas: 1
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+    model:
+      modelFormat:
+        name: vllm
+      runtime: vllm-gptoss-runtime
+      env:
+        - name: TIKTOKEN_ENCODINGS_BASE
+          value: /mnt/models
+      # Use PVC storage instead of S3 - model pre-downloaded via Job
+      storageUri: pvc://gpt-oss-model-cache
+      resources:
+        requests:
+          cpu: "4"
+          memory: 24Gi
+          nvidia.com/gpu: "1"
+        limits:
+          cpu: "8"
+          memory: 32Gi
+          nvidia.com/gpu: "1"
