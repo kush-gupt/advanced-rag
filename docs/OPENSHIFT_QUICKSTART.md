@@ -37,14 +37,64 @@ export OPENAI_API_KEY="your-key"
 
 ## Configuration
 
+### Basic
+
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NAMESPACE` | `advanced-rag` | Target namespace |
-| `OPENAI_API_KEY` | (required) | API key for LLM services |
-| `COHERE_API_KEY` | (uses OPENAI_API_KEY) | API key for Cohere reranking |
+| `OPENAI_API_KEY` | (required) | Default API key for all services |
+| `OPENAI_BASE_URL` | OpenAI | Default base URL for all services |
 | `SKIP_MILVUS` | `false` | Skip Milvus deployment |
 | `SKIP_SERVICES` | `false` | Skip service deployment |
 | `SKIP_MCP` | `false` | Skip MCP server deployment |
+
+### Model-Specific Endpoints
+
+Different services use different model types. Override these for OpenShift AI or self-hosted models:
+
+| Variable | Falls back to | Used by | Model type |
+|----------|---------------|---------|------------|
+| `EMBEDDING_API_KEY` | `OPENAI_API_KEY` | embedding-service, vector-gateway | Embedding |
+| `EMBEDDING_BASE_URL` | `OPENAI_BASE_URL` | embedding-service, vector-gateway | Embedding |
+| `LLM_API_KEY` | `OPENAI_API_KEY` | plan-service, evaluator-service | LLM/Chat |
+| `LLM_BASE_URL` | `OPENAI_BASE_URL` | plan-service, evaluator-service | LLM/Chat |
+| `RERANK_API_KEY` | `COHERE_API_KEY` → `OPENAI_API_KEY` | rerank-service | Reranker |
+| `RERANK_BASE_URL` | `OPENAI_BASE_URL` | rerank-service | Reranker |
+| `COHERE_API_KEY` | `OPENAI_API_KEY` | rerank-service | Legacy Cohere key |
+
+### Examples
+
+**OpenShift AI with separate model endpoints:**
+```bash
+export OPENAI_API_KEY="not-used"  # fallback, not actually called
+
+# Embedding model on OpenShift AI
+export EMBEDDING_API_KEY="token-for-embeddings"
+export EMBEDDING_BASE_URL="https://embed-model.apps.cluster.example.com/v1"
+
+# LLM on OpenShift AI
+export LLM_API_KEY="token-for-llm"
+export LLM_BASE_URL="https://llm-model.apps.cluster.example.com/v1"
+
+# Reranker on OpenShift AI
+export RERANK_API_KEY="token-for-rerank"
+export RERANK_BASE_URL="https://rerank-model.apps.cluster.example.com/v1"
+
+./deploy.sh
+```
+
+**Hybrid: OpenAI LLM + self-hosted embeddings:**
+```bash
+export OPENAI_API_KEY="sk-..."                            # For LLM
+export EMBEDDING_API_KEY="local-token"
+export EMBEDDING_BASE_URL="http://embed-svc.ns.svc:8000/v1"
+./deploy.sh
+```
+**Single provider (OpenAI for everything):**
+```bash
+export OPENAI_API_KEY="sk-..."
+./deploy.sh
+```
 
 ## Manual Deployment
 
