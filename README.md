@@ -414,6 +414,7 @@ advanced-rag/
 
 | Document | Description |
 |----------|-------------|
+| [docs/OPENSHIFT_QUICKSTART.md](docs/OPENSHIFT_QUICKSTART.md) | Quick deploy from OpenShift web terminal |
 | [services/README.md](services/README.md) | Microservices API reference and deployment |
 | [retrieval-mcp/README.md](retrieval-mcp/README.md) | MCP server tools and agent integration |
 | [models/README.md](models/README.md) | Self-hosted model deployment |

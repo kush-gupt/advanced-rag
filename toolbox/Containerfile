@@ -1,0 +1,78 @@
+# Advanced RAG Deployment Toolbox
+#
+# A container image with all CLI tools needed to deploy Advanced RAG
+# to any OpenShift cluster, including restricted/air-gapped environments.
+#
+# Usage:
+#   oc run toolbox --image=ghcr.io/<owner>/advanced-rag/toolbox:latest -it --rm -- bash
+#   # Inside the container:
+#   git clone https://github.com/<owner>/advanced-rag.git
+#   cd advanced-rag
+#   export OPENAI_API_KEY="your-key"
+#   ./deploy.sh
+
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
+
+LABEL maintainer="Advanced RAG Team"
+LABEL description="Deployment toolbox for Advanced RAG with oc, helm, kustomize, and git"
+
+# Versions
+ARG OC_VERSION=4.16.0
+ARG HELM_VERSION=3.16.3
+ARG KUSTOMIZE_VERSION=5.4.3
+
+USER root
+
+# Install base packages (curl-minimal is pre-installed in UBI9 minimal)
+RUN microdnf install -y \
+    git \
+    tar \
+    gzip \
+    jq \
+    findutils \
+    bash \
+    ca-certificates \
+    && microdnf clean all
+
+WORKDIR /tmp
+
+# Install OpenShift CLI (oc and kubectl)
+RUN curl -sL "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${OC_VERSION}/openshift-client-linux.tar.gz" \
+    | tar xz -C /usr/local/bin oc kubectl \
+    && chmod +x /usr/local/bin/oc /usr/local/bin/kubectl \
+    && oc version --client
+
+# Install Helm
+RUN curl -sL "https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz" \
+    | tar xz --strip-components=1 -C /usr/local/bin linux-amd64/helm \
+    && chmod +x /usr/local/bin/helm \
+    && helm version
+
+# Install Kustomize
+RUN curl -sL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" \
+    | tar xz -C /usr/local/bin \
+    && chmod +x /usr/local/bin/kustomize \
+    && kustomize version
+
+# Create workspace directory
+RUN mkdir -p /workspace && chmod 777 /workspace
+
+WORKDIR /workspace
+
+# Add helper script
+COPY --chmod=755 deploy-helper.sh /usr/local/bin/deploy-helper
+
+# Run as non-root (OpenShift assigns random UID)
+USER 1001
+
+# Verify tools
+RUN echo "=== Toolbox Contents ===" \
+    && echo "oc: $(oc version --client 2>/dev/null | head -1)" \
+    && echo "kubectl: $(kubectl version --client 2>/dev/null | head -1)" \
+    && echo "helm: $(helm version --short 2>/dev/null)" \
+    && echo "kustomize: $(kustomize version 2>/dev/null)" \
+    && echo "git: $(git --version)" \
+    && echo "jq: $(jq --version)"
+
+CMD ["/bin/bash"]
+
