@@ -57,15 +57,15 @@ setup_namespace() {
 
 create_secrets() {
     log "Creating secrets..."
-
+    
     # Resolve API keys with fallback chain
     local EMBED_KEY="${EMBEDDING_API_KEY:-$OPENAI_API_KEY}"
     local EMBED_URL="${EMBEDDING_BASE_URL:-$OPENAI_BASE_URL}"
     local LLM_KEY="${LLM_API_KEY:-$OPENAI_API_KEY}"
-    local LLM_URL="${LLM_BASE_URL:-${OPENAI_PLAN_BASE_URL:-$OPENAI_BASE_URL}}"
+    local LLM_URL="${LLM_BASE_URL:-$OPENAI_BASE_URL}"
     local RERANK_KEY="${RERANK_API_KEY:-${COHERE_API_KEY:-$OPENAI_API_KEY}}"
     local RERANK_URL="${RERANK_BASE_URL:-$OPENAI_BASE_URL}"
-
+    
     # Embedding service (uses embedding model)
     oc create secret generic embedding-service-secrets \
         --from-literal=OPENAI_API_KEY="$EMBED_KEY" \
@@ -73,7 +73,7 @@ create_secrets() {
         ${EMBED_URL:+--from-literal=OPENAI_BASE_URL="$EMBED_URL"} \
         ${EMBED_URL:+--from-literal=EMBEDDING_BASE_URL="$EMBED_URL"} \
         -n "$NAMESPACE" --dry-run=client -o yaml | oc apply -f -
-
+    
     # Plan service (uses LLM)
     oc create secret generic plan-service-secrets \
         --from-literal=OPENAI_API_KEY="$LLM_KEY" \
@@ -81,13 +81,13 @@ create_secrets() {
         ${LLM_URL:+--from-literal=OPENAI_BASE_URL="$LLM_URL"} \
         ${LLM_URL:+--from-literal=OPENAI_PLAN_BASE_URL="$LLM_URL"} \
         -n "$NAMESPACE" --dry-run=client -o yaml | oc apply -f -
-
+    
     # Evaluator service (uses LLM)
     oc create secret generic evaluator-service-secrets \
         --from-literal=OPENAI_API_KEY="$LLM_KEY" \
         ${LLM_URL:+--from-literal=OPENAI_BASE_URL="$LLM_URL"} \
         -n "$NAMESPACE" --dry-run=client -o yaml | oc apply -f -
-
+    
     # Vector gateway (uses embedding model)
     oc create secret generic vector-gateway-secrets \
         --from-literal=OPENAI_API_KEY="$EMBED_KEY" \
@@ -95,7 +95,7 @@ create_secrets() {
         ${EMBED_URL:+--from-literal=OPENAI_BASE_URL="$EMBED_URL"} \
         ${EMBED_URL:+--from-literal=EMBEDDING_BASE_URL="$EMBED_URL"} \
         -n "$NAMESPACE" --dry-run=client -o yaml | oc apply -f -
-
+    
     # Rerank service
     oc create secret generic rerank-service-secrets \
         --from-literal=RERANK_API_KEY="$RERANK_KEY" \
@@ -103,17 +103,17 @@ create_secrets() {
         ${RERANK_URL:+--from-literal=OPENAI_BASE_URL="$RERANK_URL"} \
         ${RERANK_URL:+--from-literal=RERANK_BASE_URL="$RERANK_URL"} \
         -n "$NAMESPACE" --dry-run=client -o yaml | oc apply -f -
-
+    
     log "Secrets created"
 }
 
 deploy_milvus() {
     [[ "$SKIP_MILVUS" == "true" ]] && { warn "Skipping Milvus (SKIP_MILVUS=true)"; return; }
-
+    
     log "Deploying Milvus..."
     helm repo add zilliztech https://zilliztech.github.io/milvus-helm/ 2>/dev/null || true
     helm repo update
-
+    
     local HELM_ARGS=(
         --set cluster.enabled=false
         --set etcd.podSecurityContext.enabled=false
@@ -123,33 +123,33 @@ deploy_milvus() {
         --set minio.containerSecurityContext.enabled=false
         --set standalone.messageQueue=rocksmq
     )
-
+    
     if helm status milvus -n "$NAMESPACE" >/dev/null 2>&1; then
         helm upgrade milvus zilliztech/milvus "${HELM_ARGS[@]}" -n "$NAMESPACE"
     else
         helm install milvus zilliztech/milvus "${HELM_ARGS[@]}" -n "$NAMESPACE"
     fi
-
+    
     log "Waiting for Milvus..."
     oc wait --for=condition=Ready pods -l app.kubernetes.io/name=milvus -n "$NAMESPACE" --timeout=300s || warn "Milvus not ready yet"
 }
 
 deploy_services() {
     [[ "$SKIP_SERVICES" == "true" ]] && { warn "Skipping services (SKIP_SERVICES=true)"; return; }
-
+    
     log "Deploying services..."
     for svc in chunker_service embedding_service evaluator_service plan_service rerank_service vector_gateway; do
         log "  $svc..."
         kustomize build "$SCRIPT_DIR/services/$svc/manifests/overlays/ghcr" | oc apply -n "$NAMESPACE" -f -
     done
-
+    
     log "Waiting for services..."
     oc wait --for=condition=Available deployment -l app.kubernetes.io/part-of=advanced-rag -n "$NAMESPACE" --timeout=180s || warn "Some deployments not ready"
 }
 
 deploy_mcp() {
     [[ "$SKIP_MCP" == "true" ]] && { warn "Skipping MCP (SKIP_MCP=true)"; return; }
-
+    
     log "Deploying retrieval-mcp..."
     kustomize build "$SCRIPT_DIR/retrieval-mcp/manifests/overlays/ghcr" | oc apply -n "$NAMESPACE" -f -
     oc wait --for=condition=Available deployment/retrieval-mcp -n "$NAMESPACE" --timeout=120s || warn "MCP not ready"
@@ -161,7 +161,8 @@ show_status() {
     oc get pods -n "$NAMESPACE"
     echo ""
     local DOMAIN=$(oc get ingresses.config/cluster -o jsonpath='{.spec.domain}' 2>/dev/null || echo "apps.example.com")
-    echo "Routes: https://{vector-gateway,embedding-service,rerank-service,plan-service,evaluator-service,chunker-service,retrieval-mcp}-${NAMESPACE}.${DOMAIN}"
+    echo "Routes: https://{vector-gateway,embedding-service,rerank-service,plan-service,evaluator-service,chunker-service}-${NAMESPACE}.${DOMAIN}"
+    echo "MCP:    https://retrieval-mcp-${NAMESPACE}.${DOMAIN}/mcp/"
 }
 
 main() {

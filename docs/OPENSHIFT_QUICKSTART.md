@@ -60,14 +60,9 @@ Different services use different model types. Override these for OpenShift AI or
 | `LLM_BASE_URL` | `OPENAI_BASE_URL` | plan-service, evaluator-service | LLM/Chat |
 | `RERANK_API_KEY` | `COHERE_API_KEY` → `OPENAI_API_KEY` | rerank-service | Reranker |
 | `RERANK_BASE_URL` | `OPENAI_BASE_URL` | rerank-service | Reranker |
+| `COHERE_API_KEY` | `OPENAI_API_KEY` | rerank-service | Legacy Cohere key |
 
 ### Examples
-
-**Single provider (OpenAI for everything):**
-```bash
-export OPENAI_API_KEY="sk-..."
-./deploy.sh
-```
 
 **OpenShift AI with separate model endpoints:**
 ```bash
@@ -93,6 +88,11 @@ export RERANK_BASE_URL="https://rerank-model.apps.cluster.example.com/v1"
 export OPENAI_API_KEY="sk-..."                            # For LLM
 export EMBEDDING_API_KEY="local-token"
 export EMBEDDING_BASE_URL="http://embed-svc.ns.svc:8000/v1"
+./deploy.sh
+```
+**Single provider (OpenAI for everything):**
+```bash
+export OPENAI_API_KEY="sk-..."
 ./deploy.sh
 ```
 
