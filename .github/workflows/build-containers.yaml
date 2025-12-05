@@ -21,12 +21,14 @@ on:
     paths:
       - 'services/**'
       - 'retrieval-mcp/**'
+      - 'toolbox/**'
       - '.github/workflows/build-containers.yaml'
   pull_request:
     branches: [main]
     paths:
       - 'services/**'
       - 'retrieval-mcp/**'
+      - 'toolbox/**'
       - '.github/workflows/build-containers.yaml'
   workflow_dispatch:
     inputs:
@@ -44,6 +46,7 @@ on:
           - rerank-service
           - vector-gateway
           - retrieval-mcp
+          - toolbox
 
 env:
   REGISTRY: ghcr.io
@@ -73,7 +76,7 @@ jobs:
           # Define all services with their build configurations
           # context: where to run docker build from
           # dockerfile: path to Containerfile relative to context
-          SERVICES='[{"service":"chunker-service","context":"services/chunker_service","dockerfile":"Containerfile"},{"service":"embedding-service","context":"services","dockerfile":"embedding_service/Containerfile"},{"service":"evaluator-service","context":"services/evaluator_service","dockerfile":"Containerfile"},{"service":"plan-service","context":"services/plan_service","dockerfile":"Containerfile"},{"service":"rerank-service","context":"services","dockerfile":"rerank_service/Containerfile"},{"service":"vector-gateway","context":"services","dockerfile":"vector_gateway/Containerfile"},{"service":"retrieval-mcp","context":"retrieval-mcp","dockerfile":"Containerfile"}]'
+          SERVICES='[{"service":"chunker-service","context":"services/chunker_service","dockerfile":"Containerfile"},{"service":"embedding-service","context":"services","dockerfile":"embedding_service/Containerfile"},{"service":"evaluator-service","context":"services/evaluator_service","dockerfile":"Containerfile"},{"service":"plan-service","context":"services/plan_service","dockerfile":"Containerfile"},{"service":"rerank-service","context":"services","dockerfile":"rerank_service/Containerfile"},{"service":"vector-gateway","context":"services","dockerfile":"vector_gateway/Containerfile"},{"service":"retrieval-mcp","context":"retrieval-mcp","dockerfile":"Containerfile"},{"service":"toolbox","context":"toolbox","dockerfile":"Containerfile"}]'
 
           # For push to main or workflow_dispatch without service, build all
           if [[ "${{ github.event_name }}" == "push" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
@@ -173,6 +176,7 @@ jobs:
             ["rerank-service"]="services"
             ["vector-gateway"]="services"
             ["retrieval-mcp"]="retrieval-mcp"
+            ["toolbox"]="toolbox"
           )
           
           declare -A DOCKERFILES=(
@@ -183,6 +187,7 @@ jobs:
             ["rerank-service"]="rerank_service/Containerfile"
             ["vector-gateway"]="vector_gateway/Containerfile"
             ["retrieval-mcp"]="Containerfile"
+            ["toolbox"]="Containerfile"
           )
           
           SERVICE="${{ matrix.service }}"
@@ -243,4 +248,3 @@ jobs:
             echo "❌ One or more builds failed" >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
-

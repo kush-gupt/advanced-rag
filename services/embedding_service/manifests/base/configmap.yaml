@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: embedding-service-config
+data:
+  EMBEDDING_MODEL: "text-embedding-3-small"
+  EMBEDDING_MAX_BATCH: "64"

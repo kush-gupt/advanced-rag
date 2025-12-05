@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vector-gateway-config
+data:
+  GATEWAY_BACKEND: "milvus"
+  GATEWAY_REQUIRE_BACKEND: "1"
+  GATEWAY_MAX_DOCS: "100000"
+  MILVUS_HOST: "milvus"
+  MILVUS_PORT: "19530"
+  MILVUS_COLLECTION: "rag_gateway"
+  MILVUS_DIM: "1536"
+  EMBEDDING_MODEL: "text-embedding-3-small"
+  RERANK_SERVICE_URL: "http://rerank-service:8000"

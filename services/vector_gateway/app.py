@@ -24,7 +24,7 @@ DEFAULT_BACKEND = os.environ.get("GATEWAY_BACKEND", "milvus").lower()
 DEFAULT_COLLECTION = os.environ.get("MILVUS_COLLECTION", "rag_gateway")
 REQUIRE_BACKEND = os.environ.get("GATEWAY_REQUIRE_BACKEND", "0").lower() in {"1", "true", "yes"}
 CONFIG_PATH = os.environ.get("GATEWAY_CONFIG")
-RERANK_SERVICE_URL = os.environ.get("RERANK_SERVICE_URL", "http://rerank-service.advanced-rag.svc.cluster.local:8003")
+RERANK_SERVICE_URL = os.environ.get("RERANK_SERVICE_URL", "http://rerank-service:8000")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("vector_gateway")
 app = FastAPI(title="Vector Gateway", version="0.2.0")

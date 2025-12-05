@@ -1,0 +1,32 @@
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
+
+LABEL maintainer="Kush Gupta"
+LABEL description="Deployment toolbox for Advanced RAG with oc, helm, kustomize, and git"
+
+ARG OC_VERSION=4.16.0
+ARG HELM_VERSION=3.16.3
+ARG KUSTOMIZE_VERSION=5.4.3
+
+USER root
+
+RUN microdnf install -y git tar gzip jq findutils bash ca-certificates && microdnf clean all
+
+WORKDIR /tmp
+
+RUN curl -sL "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${OC_VERSION}/openshift-client-linux.tar.gz" \
+    | tar xz -C /usr/local/bin oc kubectl && chmod +x /usr/local/bin/oc /usr/local/bin/kubectl
+
+RUN curl -sL "https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz" \
+    | tar xz --strip-components=1 -C /usr/local/bin linux-amd64/helm && chmod +x /usr/local/bin/helm
+
+RUN curl -sL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" \
+    | tar xz -C /usr/local/bin && chmod +x /usr/local/bin/kustomize
+
+RUN mkdir -p /workspace && chmod 777 /workspace
+WORKDIR /workspace
+
+COPY --chmod=755 deploy-helper.sh /usr/local/bin/deploy-helper
+
+USER 1001
+
+CMD ["/bin/bash"]
