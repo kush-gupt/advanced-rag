@@ -1,28 +1,41 @@
-# OpenShift Web Terminal Quickstart
+# OpenShift Quickstart
 
-Deploy the complete Advanced RAG pipeline from an OpenShift web terminal using pre-built container images.
+Deploy the complete Advanced RAG pipeline to OpenShift using pre-built container images.
 
-## One-Command Deploy
+## Option 1: Toolbox Container (Recommended)
+
+Run the deployment toolbox directly in your cluster—no local tools required:
+
+```bash
+oc run toolbox \
+  --image=ghcr.io/kush-gupt/advanced-rag/toolbox:latest \
+  -it --rm --restart=Never -- bash
+
+# Inside the toolbox:
+git clone https://github.com/kush-gupt/advanced-rag.git
+cd advanced-rag
+export OPENAI_API_KEY="your-key"
+./deploy.sh
+```
+
+## Option 2: Web Terminal
+
+From an OpenShift web terminal (requires git, helm, kustomize installed):
 
 ```bash
 git clone https://github.com/kush-gupt/advanced-rag.git
 cd advanced-rag
-export OPENAI_API_KEY="your-openai-api-key"
-export NAMESPACE="something"
+export OPENAI_API_KEY="your-key"
 ./deploy.sh
 ```
 
-That's it! The script will deploy Milvus, all services, and the MCP server.
-
 ## Prerequisites
 
-- OpenShift cluster access (logged in via `oc login`)
-- Helm 3.x (`helm version`)
+- OpenShift cluster access (`oc login`)
 - API key: OpenAI or compatible provider
+- For Option 2: helm 3.x and kustomize
 
-## Configuration Options
-
-Set these environment variables before running `deploy.sh`:
+## Configuration
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -33,26 +46,13 @@ Set these environment variables before running `deploy.sh`:
 | `SKIP_SERVICES` | `false` | Skip service deployment |
 | `SKIP_MCP` | `false` | Skip MCP server deployment |
 
-### Custom Namespace
-
-```bash
-export OPENAI_API_KEY="your-key"
-export NAMESPACE="my-rag-project"
-./deploy.sh
-```
-
 ## Manual Deployment
 
-If you prefer step-by-step deployment:
-
-### 1. Clone and Set Up
+### 1. Set Up
 
 ```bash
-git clone https://github.com/kush-gupt/advanced-rag.git
-cd advanced-rag
-
-export NAMESPACE=advanced-rag
-export OPENAI_API_KEY="your-openai-api-key"
+git clone https://github.com/kush-gupt/advanced-rag.git && cd advanced-rag
+export NAMESPACE=advanced-rag OPENAI_API_KEY="your-key"
 ```
 
 ### 2. Create Namespace and Secrets
@@ -60,17 +60,10 @@ export OPENAI_API_KEY="your-openai-api-key"
 ```bash
 oc new-project $NAMESPACE 2>/dev/null || oc project $NAMESPACE
 
-oc create secret generic embedding-service-secrets \
-  --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY" -n $NAMESPACE --dry-run=client -o yaml | oc apply -f -
-
-oc create secret generic plan-service-secrets \
-  --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY" -n $NAMESPACE --dry-run=client -o yaml | oc apply -f -
-
-oc create secret generic evaluator-service-secrets \
-  --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY" -n $NAMESPACE --dry-run=client -o yaml | oc apply -f -
-
-oc create secret generic vector-gateway-secrets \
-  --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY" -n $NAMESPACE --dry-run=client -o yaml | oc apply -f -
+for svc in embedding-service plan-service evaluator-service vector-gateway; do
+  oc create secret generic ${svc}-secrets \
+    --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY" -n $NAMESPACE --dry-run=client -o yaml | oc apply -f -
+done
 
 oc create secret generic rerank-service-secrets \
   --from-literal=COHERE_API_KEY="$OPENAI_API_KEY" \
@@ -80,8 +73,7 @@ oc create secret generic rerank-service-secrets \
 ### 3. Deploy Milvus
 
 ```bash
-helm repo add zilliztech https://zilliztech.github.io/milvus-helm/
-helm repo update
+helm repo add zilliztech https://zilliztech.github.io/milvus-helm/ && helm repo update
 
 helm install milvus zilliztech/milvus \
   --set cluster.enabled=false \
@@ -99,12 +91,10 @@ oc wait --for=condition=Ready pods -l app.kubernetes.io/name=milvus -n $NAMESPAC
 ### 4. Deploy Services
 
 ```bash
-cd services
-make deploy-all NAMESPACE=$NAMESPACE
-cd ..
+cd services && make deploy-all NAMESPACE=$NAMESPACE && cd ..
 ```
 
-### 5. Deploy MCP Server (Optional)
+### 5. Deploy MCP Server
 
 ```bash
 kustomize build retrieval-mcp/manifests/overlays/ghcr | oc apply -n $NAMESPACE -f -
@@ -113,16 +103,18 @@ kustomize build retrieval-mcp/manifests/overlays/ghcr | oc apply -n $NAMESPACE -
 ### 6. Verify
 
 ```bash
-oc get pods -n $NAMESPACE
-oc get routes -n $NAMESPACE
+oc get pods,routes -n $NAMESPACE
 ```
 
 ## Service URLs
 
-After deployment, services are available at:
+```bash
+CLUSTER_DOMAIN=$(oc get ingresses.config/cluster -o jsonpath='{.spec.domain}')
+echo "Vector Gateway: https://vector-gateway-${NAMESPACE}.${CLUSTER_DOMAIN}"
+```
 
-| Service | URL |
-|---------|-----|
+| Service | Path |
+|---------|------|
 | Vector Gateway | `https://vector-gateway-$NAMESPACE.$CLUSTER_DOMAIN` |
 | Embedding Service | `https://embedding-service-$NAMESPACE.$CLUSTER_DOMAIN` |
 | Rerank Service | `https://rerank-service-$NAMESPACE.$CLUSTER_DOMAIN` |
@@ -131,69 +123,39 @@ After deployment, services are available at:
 | Chunker Service | `https://chunker-service-$NAMESPACE.$CLUSTER_DOMAIN` |
 | Retrieval MCP | `https://retrieval-mcp-$NAMESPACE.$CLUSTER_DOMAIN/mcp/` |
 
-Get your cluster domain with:
-```bash
-oc get ingresses.config/cluster -o jsonpath='{.spec.domain}'
-```
-
-## Test the Pipeline
+## Test
 
 ```bash
-CLUSTER_DOMAIN=$(oc get ingresses.config/cluster -o jsonpath='{.spec.domain}')
 GATEWAY_URL="https://vector-gateway-${NAMESPACE}.${CLUSTER_DOMAIN}"
 
-# Ingest a document
-curl -X POST "$GATEWAY_URL/upsert" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "documents": [{"text": "RAG pipelines combine retrieval and generation.", "metadata": {"source": "test"}}],
-    "collection": "test"
-  }'
+curl -X POST "$GATEWAY_URL/upsert" -H "Content-Type: application/json" \
+  -d '{"documents": [{"text": "RAG combines retrieval and generation.", "metadata": {"source": "test"}}], "collection": "test"}'
 
-# Search
-curl -X POST "$GATEWAY_URL/search" \
-  -H "Content-Type: application/json" \
+curl -X POST "$GATEWAY_URL/search" -H "Content-Type: application/json" \
   -d '{"query": "How do RAG pipelines work?", "collection": "test", "top_k": 5}'
 ```
 
 ## Troubleshooting
 
-### Check pod status
 ```bash
 oc get pods -n $NAMESPACE
-oc describe pod <pod-name> -n $NAMESPACE
-```
-
-### View logs
-```bash
 oc logs deployment/vector-gateway -n $NAMESPACE
-oc logs deployment/milvus-standalone -n $NAMESPACE
-```
-
-### Restart a service
-```bash
 oc rollout restart deployment/vector-gateway -n $NAMESPACE
 ```
 
 ## Cleanup
 
 ```bash
-# Delete services
 oc delete all -l app.kubernetes.io/part-of=advanced-rag -n $NAMESPACE
-
-# Delete Milvus
 helm uninstall milvus -n $NAMESPACE
-
-# Delete namespace
 oc delete project $NAMESPACE
 ```
 
 ## Container Images
 
-All images are pre-built and available from GitHub Container Registry:
-
 | Service | Image |
 |---------|-------|
+| toolbox | `ghcr.io/kush-gupt/advanced-rag/toolbox:latest` |
 | chunker-service | `ghcr.io/kush-gupt/advanced-rag/chunker-service:latest` |
 | embedding-service | `ghcr.io/kush-gupt/advanced-rag/embedding-service:latest` |
 | evaluator-service | `ghcr.io/kush-gupt/advanced-rag/evaluator-service:latest` |

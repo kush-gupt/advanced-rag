@@ -1,6 +1,6 @@
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
 
-LABEL maintainer="Advanced RAG Team"
+LABEL maintainer="Kush Gupta"
 LABEL description="Deployment toolbox for Advanced RAG with oc, helm, kustomize, and git"
 
 ARG OC_VERSION=4.16.0
