@@ -51,7 +51,7 @@ podman run -it --rm \
   -e OPENAI_API_KEY="your-key" \
   ghcr.io/redhat-ai-services/advanced-rag/toolbox:latest
 
-# Inside container, login and deploy
+# Inside container, log in and deploy
 oc login https://api.your-cluster.com:6443 --token=sha256~...
 deploy-helper deploy
 ```

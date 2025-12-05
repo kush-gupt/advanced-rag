@@ -16,44 +16,28 @@
 
 set -e
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
-
+RED='\033[0;31m' GREEN='\033[0;32m' YELLOW='\033[1;33m' NC='\033[0m'
 log() { echo -e "${GREEN}[INFO]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
-# Configuration
 NAMESPACE="${NAMESPACE:-advanced-rag}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# Validate prerequisites
 check_prerequisites() {
     log "Checking prerequisites..."
-    
     command -v oc >/dev/null 2>&1 || error "oc CLI not found. Please install OpenShift CLI."
     command -v kustomize >/dev/null 2>&1 || error "kustomize not found. Install with: brew install kustomize"
-    command -v helm >/dev/null 2>&1 || error "helm not found. Install with: brew install helm"
-    
+    [[ "$SKIP_MILVUS" == "true" ]] || command -v helm >/dev/null 2>&1 || error "helm not found. Install with: brew install helm"
     oc whoami >/dev/null 2>&1 || error "Not logged into OpenShift. Run 'oc login' first."
-    
-    if [[ -z "$OPENAI_API_KEY" ]]; then
-        error "OPENAI_API_KEY environment variable is required"
-    fi
-    
+    [[ -n "$OPENAI_API_KEY" ]] || error "OPENAI_API_KEY environment variable is required"
     log "Prerequisites OK"
 }
 
-# Create namespace
 setup_namespace() {
     log "Setting up namespace: $NAMESPACE"
     oc new-project "$NAMESPACE" 2>/dev/null || oc project "$NAMESPACE"
 }
 
-# Create secrets
 create_secrets() {
     log "Creating secrets..."
     
@@ -88,7 +72,6 @@ create_secrets() {
     log "Secrets created"
 }
 
-# Deploy Milvus
 deploy_milvus() {
     if [[ "$SKIP_MILVUS" == "true" ]]; then
         warn "Skipping Milvus deployment (SKIP_MILVUS=true)"
@@ -123,7 +106,6 @@ deploy_milvus() {
     oc wait --for=condition=Ready pods -l app.kubernetes.io/name=milvus -n "$NAMESPACE" --timeout=300s || warn "Milvus pods not ready yet, continuing..."
 }
 
-# Deploy services
 deploy_services() {
     if [[ "$SKIP_SERVICES" == "true" ]]; then
         warn "Skipping services deployment (SKIP_SERVICES=true)"
@@ -150,7 +132,6 @@ deploy_services() {
     oc wait --for=condition=Available deployment -l app.kubernetes.io/part-of=advanced-rag -n "$NAMESPACE" --timeout=180s || warn "Some deployments not ready yet"
 }
 
-# Deploy MCP server
 deploy_mcp() {
     if [[ "$SKIP_MCP" == "true" ]]; then
         warn "Skipping MCP server deployment (SKIP_MCP=true)"
@@ -163,7 +144,6 @@ deploy_mcp() {
     oc wait --for=condition=Available deployment/retrieval-mcp -n "$NAMESPACE" --timeout=120s || warn "MCP server not ready yet"
 }
 
-# Show deployment status
 show_status() {
     log "Deployment complete!"
     echo ""
@@ -188,7 +168,6 @@ show_status() {
     echo ""
 }
 
-# Main
 main() {
     echo "=============================================="
     echo "  Advanced RAG - OpenShift Deployment"

@@ -8,6 +8,7 @@ Deploy the complete Advanced RAG pipeline from an OpenShift web terminal using p
 git clone https://github.com/kush-gupt/advanced-rag.git
 cd advanced-rag
 export OPENAI_API_KEY="your-openai-api-key"
+export NAMESPACE="something"
 ./deploy.sh
 ```
 
@@ -44,7 +45,7 @@ export NAMESPACE="my-rag-project"
 
 If you prefer step-by-step deployment:
 
-### 1. Clone and Setup
+### 1. Clone and Set Up
 
 ```bash
 git clone https://github.com/kush-gupt/advanced-rag.git
