@@ -5,35 +5,31 @@
 #
 # Prerequisites:
 #   - oc login to OpenShift cluster
-#   - ssh ec2-dev configured
-#   - Secrets already created in advanced-rag namespace
+#   - Secrets already created in target namespace
 #
 # Usage:
-#   make build-all        # Build all services on ec2-dev
-#   make push-all         # Push all images to OpenShift registry
-#   make deploy-all       # Apply manifests and rollout all services
-#   make rollout-all      # Just restart all deployments
-#   make status           # Check health of all services
-#   make build-<service>  # Build a single service (e.g., make build-plan)
-#   make deploy-<service> # Deploy a single service
+#   make deploy-all                    # Deploy using GHCR images (default)
+#   make deploy-all OVERLAY=openshift  # Deploy using OpenShift internal registry
+#   make build-all                     # Build all services on ec2-dev
+#   make push-all                      # Push all images to OpenShift registry
+#   make status                        # Check health of all services
+#
+# Namespace-agnostic deployment:
+#   NAMESPACE=my-rag make deploy-all   # Deploy to custom namespace
 
 SHELL := /bin/bash
 
-# Configuration
-NAMESPACE := advanced-rag
-REGISTRY := $(shell oc registry info 2>/dev/null)
+# Configuration (can be overridden via environment)
+NAMESPACE ?= advanced-rag
+OVERLAY ?= ghcr
+REGISTRY ?= $(shell oc registry info 2>/dev/null)
 TOKEN := $(shell oc whoami -t 2>/dev/null)
-REMOTE_HOST := ec2-dev
-REMOTE_BUILD_DIR := ~/builds
+REMOTE_HOST ?= ec2-dev
+REMOTE_BUILD_DIR ?= ~/builds
 
 # Service definitions
-# Self-contained services (build from their own directory)
 SELF_CONTAINED_SERVICES := chunker plan evaluator
-
-# Services requiring root context (depend on rag_core)
 ROOT_CONTEXT_SERVICES := embedding rerank vector-gateway
-
-# All services
 ALL_SERVICES := $(SELF_CONTAINED_SERVICES) $(ROOT_CONTEXT_SERVICES)
 
 # Service directory mapping
@@ -52,113 +48,60 @@ embedding_DEPLOY := embedding-service
 rerank_DEPLOY := rerank-service
 vector-gateway_DEPLOY := vector-gateway
 
-# Route hostnames (derived from cluster)
+# Route hostnames
 CLUSTER_DOMAIN := $(shell oc get ingresses.config/cluster -o jsonpath='{.spec.domain}' 2>/dev/null)
 
-.PHONY: all help build-all push-all deploy-all rollout-all status login check-prereqs clean
+.PHONY: all help deploy-all deploy-ghcr rollout-all status pods clean kustomize-check
 
 help:
 	@echo "Services Makefile for Advanced RAG"
 	@echo ""
-	@echo "Prerequisites:"
-	@echo "  - oc login to OpenShift cluster"
-	@echo "  - ssh ec2-dev configured for remote builds"
-	@echo "  - Secrets created in $(NAMESPACE) namespace"
+	@echo "Quick Start (uses pre-built GHCR images):"
+	@echo "  make deploy-all              Deploy all services"
+	@echo "  make status                  Check service health"
 	@echo ""
-	@echo "Targets:"
-	@echo "  make build-all       Build all services on ec2-dev"
-	@echo "  make push-all        Push all images to OpenShift registry"
-	@echo "  make deploy-all      Apply manifests and rollout all services"
-	@echo "  make rollout-all     Restart all deployments (use existing images)"
-	@echo "  make status          Check health of all services"
+	@echo "Configuration (override via environment):"
+	@echo "  NAMESPACE   Target namespace (default: $(NAMESPACE))"
+	@echo "  OVERLAY     Kustomize overlay: ghcr or openshift (default: $(OVERLAY))"
 	@echo ""
-	@echo "Single service targets:"
-	@echo "  make build-<svc>     Build one service (plan, embedding, etc.)"
-	@echo "  make push-<svc>      Push one service image"
-	@echo "  make deploy-<svc>    Deploy one service"
-	@echo "  make rollout-<svc>   Restart one deployment"
+	@echo "Deploy Targets:"
+	@echo "  make deploy-all              Deploy all services"
+	@echo "  make deploy-<svc>            Deploy one service"
+	@echo "  make rollout-all             Restart all deployments"
+	@echo ""
+	@echo "Build Targets (requires ssh to build host):"
+	@echo "  make build-all               Build all services"
+	@echo "  make push-all                Push to OpenShift registry"
+	@echo ""
+	@echo "Examples:"
+	@echo "  NAMESPACE=my-rag make deploy-all"
+	@echo "  OVERLAY=openshift make deploy-all"
 	@echo ""
 	@echo "Services: $(ALL_SERVICES)"
 
-check-prereqs:
-	@echo "Checking prerequisites..."
-	@oc whoami > /dev/null 2>&1 || (echo "ERROR: Not logged into OpenShift. Run 'oc login' first." && exit 1)
-	@ssh -q $(REMOTE_HOST) exit || (echo "ERROR: Cannot connect to $(REMOTE_HOST). Check SSH config." && exit 1)
-	@echo "Prerequisites OK"
-
-login:
-	@echo "Logging into OpenShift registry on $(REMOTE_HOST)..."
-	@ssh $(REMOTE_HOST) "podman login --tls-verify=false -u unused -p '$(TOKEN)' '$(REGISTRY)'" 2>&1
+kustomize-check:
+	@command -v kustomize > /dev/null 2>&1 || (echo "ERROR: kustomize not found. Install with: brew install kustomize" && exit 1)
 
 # ============================================================================
-# Build targets
+# Deploy targets (using Kustomize with GHCR images by default)
 # ============================================================================
 
-build-all: check-prereqs login $(addprefix build-,$(ALL_SERVICES))
-	@echo "All services built successfully"
-
-# Self-contained services (sync service dir, build from there)
-define SELF_CONTAINED_BUILD
-build-$(1): check-prereqs
-	@echo "Building $(1) service..."
-	@rsync -az --delete $$($(1)_DIR)/ $(REMOTE_HOST):$(REMOTE_BUILD_DIR)/$(1)-service/
-	@ssh $(REMOTE_HOST) "cd $(REMOTE_BUILD_DIR)/$(1)-service && podman build --platform linux/amd64 -t $(1)-service:latest -f Containerfile . 2>&1" | tail -10
-	@echo "$(1) service built"
-endef
-
-$(foreach svc,$(SELF_CONTAINED_SERVICES),$(eval $(call SELF_CONTAINED_BUILD,$(svc))))
-
-# Root context services (sync rag_core + service, build from services context)
-define ROOT_CONTEXT_BUILD
-build-$(1): check-prereqs
-	@echo "Building $(1) service..."
-	@ssh $(REMOTE_HOST) "mkdir -p $(REMOTE_BUILD_DIR)/$(1)-service"
-	@rsync -az --delete rag_core/ $(REMOTE_HOST):$(REMOTE_BUILD_DIR)/$(1)-service/rag_core/
-	@rsync -az --delete $$($(1)_DIR)/ $(REMOTE_HOST):$(REMOTE_BUILD_DIR)/$(1)-service/$$($(1)_DIR)/
-	@ssh $(REMOTE_HOST) "cd $(REMOTE_BUILD_DIR)/$(1)-service && podman build --platform linux/amd64 -t $(1)-service:latest -f $$($(1)_DIR)/Containerfile . 2>&1" | tail -10
-	@echo "$(1) service built"
-endef
-
-$(foreach svc,$(ROOT_CONTEXT_SERVICES),$(eval $(call ROOT_CONTEXT_BUILD,$(svc))))
-
-# ============================================================================
-# Push targets
-# ============================================================================
-
-push-all: login $(addprefix push-,$(ALL_SERVICES))
-	@echo "All images pushed successfully"
-
-define PUSH_TARGET
-push-$(1): login
-	@echo "Pushing $(1) service..."
-	@ssh $(REMOTE_HOST) "podman tag $(1)-service:latest $(REGISTRY)/$(NAMESPACE)/$(1)-service:latest 2>/dev/null || true"
-	@ssh $(REMOTE_HOST) "podman push --tls-verify=false $(REGISTRY)/$(NAMESPACE)/$(1)-service:latest 2>&1" | tail -5
-	@echo "$(1) service pushed"
-endef
-
-$(foreach svc,$(ALL_SERVICES),$(eval $(call PUSH_TARGET,$(svc))))
-
-# ============================================================================
-# Deploy targets
-# ============================================================================
-
-deploy-all: $(addprefix deploy-,$(ALL_SERVICES))
-	@echo "All services deployed"
+deploy-all: kustomize-check $(addprefix deploy-,$(ALL_SERVICES))
+	@echo "All services deployed to $(NAMESPACE) using $(OVERLAY) overlay"
 	@$(MAKE) status
 
 define DEPLOY_TARGET
-deploy-$(1):
-	@echo "Deploying $(1) service..."
-	@oc apply -f $$($(1)_DIR)/manifests/ -n $(NAMESPACE)
+deploy-$(1): kustomize-check
+	@echo "Deploying $(1) to $(NAMESPACE)..."
+	@kustomize build $$($(1)_DIR)/manifests/overlays/$(OVERLAY) | oc apply -n $(NAMESPACE) -f -
 	@oc rollout restart deployment/$$($(1)_DEPLOY) -n $(NAMESPACE) 2>/dev/null || true
 	@oc rollout status deployment/$$($(1)_DEPLOY) -n $(NAMESPACE) --timeout=120s
-	@echo "$(1) service deployed"
 endef
 
 $(foreach svc,$(ALL_SERVICES),$(eval $(call DEPLOY_TARGET,$(svc))))
 
 # ============================================================================
-# Rollout targets (restart without rebuilding)
+# Rollout targets
 # ============================================================================
 
 rollout-all: $(addprefix rollout-,$(ALL_SERVICES))
@@ -167,7 +110,6 @@ rollout-all: $(addprefix rollout-,$(ALL_SERVICES))
 
 define ROLLOUT_TARGET
 rollout-$(1):
-	@echo "Restarting $(1) service..."
 	@oc rollout restart deployment/$$($(1)_DEPLOY) -n $(NAMESPACE)
 	@oc rollout status deployment/$$($(1)_DEPLOY) -n $(NAMESPACE) --timeout=120s
 endef
@@ -175,18 +117,15 @@ endef
 $(foreach svc,$(ALL_SERVICES),$(eval $(call ROLLOUT_TARGET,$(svc))))
 
 # ============================================================================
-# Status and health checks
+# Status
 # ============================================================================
 
 status:
-	@echo "Service Health Status:"
-	@echo "====================="
-	@printf "%-20s %s\n" "chunker-service:" "$$(curl -sk https://chunker-service-$(NAMESPACE).$(CLUSTER_DOMAIN)/healthz 2>/dev/null || echo 'UNREACHABLE')"
-	@printf "%-20s %s\n" "plan-service:" "$$(curl -sk https://plan-service-$(NAMESPACE).$(CLUSTER_DOMAIN)/healthz 2>/dev/null || echo 'UNREACHABLE')"
-	@printf "%-20s %s\n" "evaluator-service:" "$$(curl -sk https://evaluator-service-$(NAMESPACE).$(CLUSTER_DOMAIN)/healthz 2>/dev/null || echo 'UNREACHABLE')"
-	@printf "%-20s %s\n" "embedding-service:" "$$(curl -sk https://embedding-service-$(NAMESPACE).$(CLUSTER_DOMAIN)/healthz 2>/dev/null || echo 'UNREACHABLE')"
-	@printf "%-20s %s\n" "rerank-service:" "$$(curl -sk https://rerank-service-$(NAMESPACE).$(CLUSTER_DOMAIN)/healthz 2>/dev/null || echo 'UNREACHABLE')"
-	@printf "%-20s %s\n" "vector-gateway:" "$$(curl -sk https://vector-gateway-$(NAMESPACE).$(CLUSTER_DOMAIN)/healthz 2>/dev/null || echo 'UNREACHABLE')"
+	@echo "Service Health ($(NAMESPACE)):"
+	@echo "=============================="
+	@for svc in chunker-service plan-service evaluator-service embedding-service rerank-service vector-gateway; do \
+		printf "%-20s %s\n" "$$svc:" "$$(curl -sk https://$$svc-$(NAMESPACE).$(CLUSTER_DOMAIN)/healthz 2>/dev/null || echo 'UNREACHABLE')"; \
+	done
 
 pods:
 	@oc get pods -n $(NAMESPACE) -l app.kubernetes.io/part-of=advanced-rag
@@ -195,20 +134,59 @@ logs-%:
 	@oc logs -f deployment/$($*_DEPLOY) -n $(NAMESPACE)
 
 # ============================================================================
-# Full pipeline: build, push, deploy
+# Build targets (for custom builds, requires remote host)
 # ============================================================================
+
+check-prereqs:
+	@oc whoami > /dev/null 2>&1 || (echo "ERROR: Not logged into OpenShift" && exit 1)
+	@ssh -q $(REMOTE_HOST) exit 2>/dev/null || (echo "ERROR: Cannot connect to $(REMOTE_HOST)" && exit 1)
+
+login:
+	@ssh $(REMOTE_HOST) "podman login --tls-verify=false -u unused -p '$(TOKEN)' '$(REGISTRY)'" 2>&1
+
+build-all: check-prereqs login $(addprefix build-,$(ALL_SERVICES))
+	@echo "All services built"
+
+define SELF_CONTAINED_BUILD
+build-$(1): check-prereqs
+	@rsync -az --delete $$($(1)_DIR)/ $(REMOTE_HOST):$(REMOTE_BUILD_DIR)/$(1)-service/
+	@ssh $(REMOTE_HOST) "cd $(REMOTE_BUILD_DIR)/$(1)-service && podman build --platform linux/amd64 -t $(1)-service:latest -f Containerfile ." | tail -5
+endef
+
+$(foreach svc,$(SELF_CONTAINED_SERVICES),$(eval $(call SELF_CONTAINED_BUILD,$(svc))))
+
+define ROOT_CONTEXT_BUILD
+build-$(1): check-prereqs
+	@ssh $(REMOTE_HOST) "mkdir -p $(REMOTE_BUILD_DIR)/$(1)-service"
+	@rsync -az --delete rag_core/ $(REMOTE_HOST):$(REMOTE_BUILD_DIR)/$(1)-service/rag_core/
+	@rsync -az --delete $$($(1)_DIR)/ $(REMOTE_HOST):$(REMOTE_BUILD_DIR)/$(1)-service/$$($(1)_DIR)/
+	@ssh $(REMOTE_HOST) "cd $(REMOTE_BUILD_DIR)/$(1)-service && podman build --platform linux/amd64 -t $(1)-service:latest -f $$($(1)_DIR)/Containerfile ." | tail -5
+endef
+
+$(foreach svc,$(ROOT_CONTEXT_SERVICES),$(eval $(call ROOT_CONTEXT_BUILD,$(svc))))
+
+push-all: login $(addprefix push-,$(ALL_SERVICES))
+	@echo "All images pushed to $(NAMESPACE)"
+
+define PUSH_TARGET
+push-$(1): login
+	@ssh $(REMOTE_HOST) "podman tag $(1)-service:latest $(REGISTRY)/$(NAMESPACE)/$(1)-service:latest" 2>/dev/null || true
+	@ssh $(REMOTE_HOST) "podman push --tls-verify=false $(REGISTRY)/$(NAMESPACE)/$(1)-service:latest" | tail -3
+endef
+
+$(foreach svc,$(ALL_SERVICES),$(eval $(call PUSH_TARGET,$(svc))))
 
 all: build-all push-all deploy-all
 
-# Single service full pipeline
-%-full: build-% push-% deploy-%
-	@echo "$* service fully deployed"
-
-# ============================================================================
-# Cleanup
-# ============================================================================
-
 clean:
-	@echo "Cleaning remote build directories..."
 	@ssh $(REMOTE_HOST) "rm -rf $(REMOTE_BUILD_DIR)/*-service" 2>/dev/null || true
-	@echo "Clean complete"
+
+# ============================================================================
+# Render manifests (for review)
+# ============================================================================
+
+render-%: kustomize-check
+	@kustomize build $($*_DIR)/manifests/overlays/$(OVERLAY)
+
+render-all: kustomize-check
+	@for svc in $(ALL_SERVICES); do echo "--- $$svc ---"; $(MAKE) render-$$svc; done

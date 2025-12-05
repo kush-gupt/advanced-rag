@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rerank-service-config
+data:
+  RERANK_PROVIDER: "cohere"
+  RERANK_MODEL: "rerank-english-v3.0"
