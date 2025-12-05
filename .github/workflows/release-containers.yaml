@@ -1,0 +1,153 @@
+# Build and push release container images
+#
+# This workflow builds and pushes container images when a release tag is created.
+# Images are tagged with the semantic version from the git tag.
+#
+# Tag format: v1.2.3 or service-v1.2.3 (for service-specific releases)
+
+name: Release Containers
+
+on:
+  push:
+    tags:
+      - 'v*'           # Global release (all services)
+      - '*-v*'         # Service-specific release (e.g., chunker-service-v1.0.0)
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/advanced-rag
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Extract version
+        id: version
+        run: |
+          TAG="${{ github.ref_name }}"
+          # Extract version (everything after the last 'v')
+          VERSION=$(echo "$TAG" | sed 's/.*v//')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Determine services to build
+        id: set-matrix
+        run: |
+          TAG="${{ github.ref_name }}"
+          
+          # All services configuration
+          ALL_SERVICES='[{"service":"chunker-service","context":"services/chunker_service","dockerfile":"Containerfile"},{"service":"embedding-service","context":"services","dockerfile":"embedding_service/Containerfile"},{"service":"evaluator-service","context":"services/evaluator_service","dockerfile":"Containerfile"},{"service":"plan-service","context":"services/plan_service","dockerfile":"Containerfile"},{"service":"rerank-service","context":"services","dockerfile":"rerank_service/Containerfile"},{"service":"vector-gateway","context":"services","dockerfile":"vector_gateway/Containerfile"},{"service":"retrieval-mcp","context":"retrieval-mcp","dockerfile":"Containerfile"}]'
+          
+          # Check if global release (just v*) or service-specific
+          if [[ "$TAG" =~ ^v[0-9] ]]; then
+            # Global release - build all services
+            echo "matrix={\"include\":$ALL_SERVICES}" >> $GITHUB_OUTPUT
+          else
+            # Service-specific release - extract service name
+            SERVICE_NAME=$(echo "$TAG" | sed 's/-v.*//')
+            
+            # Find matching service
+            FILTERED=$(echo "$ALL_SERVICES" | jq --arg svc "$SERVICE_NAME" '[.[] | select(.service == $svc)]')
+            
+            if [[ $(echo "$FILTERED" | jq 'length') -eq 0 ]]; then
+              echo "::error::Unknown service: $SERVICE_NAME"
+              exit 1
+            fi
+            
+            echo "matrix={\"include\":$FILTERED}" >> $GITHUB_OUTPUT
+          fi
+
+  release:
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.prepare.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.prepare.outputs.version }}
+            type=semver,pattern={{major}},value=${{ needs.prepare.outputs.version }}
+            type=raw,value=latest
+
+      - name: Determine build context
+        id: build-config
+        run: |
+          declare -A CONTEXTS=(
+            ["chunker-service"]="services/chunker_service"
+            ["embedding-service"]="services"
+            ["evaluator-service"]="services/evaluator_service"
+            ["plan-service"]="services/plan_service"
+            ["rerank-service"]="services"
+            ["vector-gateway"]="services"
+            ["retrieval-mcp"]="retrieval-mcp"
+          )
+          
+          declare -A DOCKERFILES=(
+            ["chunker-service"]="Containerfile"
+            ["embedding-service"]="embedding_service/Containerfile"
+            ["evaluator-service"]="Containerfile"
+            ["plan-service"]="Containerfile"
+            ["rerank-service"]="rerank_service/Containerfile"
+            ["vector-gateway"]="vector_gateway/Containerfile"
+            ["retrieval-mcp"]="Containerfile"
+          )
+          
+          SERVICE="${{ matrix.service }}"
+          echo "context=${CONTEXTS[$SERVICE]}" >> $GITHUB_OUTPUT
+          echo "dockerfile=${DOCKERFILES[$SERVICE]}" >> $GITHUB_OUTPUT
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ steps.build-config.outputs.context }}
+          file: ${{ steps.build-config.outputs.context }}/${{ steps.build-config.outputs.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      - name: Generate release summary
+        run: |
+          echo "## 🚀 Release: ${{ matrix.service }} v${{ needs.prepare.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Image" >> $GITHUB_STEP_SUMMARY
+          echo "\`${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Tags" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Pull Command" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "podman pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:${{ needs.prepare.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+

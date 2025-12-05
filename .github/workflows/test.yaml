@@ -1,0 +1,156 @@
+# Run tests for services
+#
+# This workflow runs tests for changed services on pull requests
+# to validate code quality before building containers.
+
+name: Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/**'
+      - 'retrieval-mcp/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'services/**'
+      - 'retrieval-mcp/**'
+
+jobs:
+  # Test Go-based chunker service
+  test-chunker:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/chunker_service
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: services/chunker_service/go.mod
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Generate coverage report
+        run: |
+          go tool cover -func=coverage.out
+          echo "## Go Test Coverage" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          go tool cover -func=coverage.out >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # Test Python-based retrieval-mcp
+  test-retrieval-mcp:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: retrieval-mcp
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: retrieval-mcp/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov
+
+      - name: Run tests
+        run: |
+          pytest tests/ -v --cov=src --cov-report=term-missing --cov-report=xml
+
+      - name: Generate coverage summary
+        run: |
+          echo "## Python Test Coverage (retrieval-mcp)" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          coverage report >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # Lint Python services
+  lint-python:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install linters
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff mypy
+
+      - name: Run ruff (format check)
+        run: ruff check services/ retrieval-mcp/src/ --output-format=github
+        continue-on-error: true
+
+      - name: Run ruff (format)
+        run: ruff format --check services/ retrieval-mcp/src/
+        continue-on-error: true
+
+  # Lint Go code
+  lint-go:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: services/chunker_service/go.mod
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+          working-directory: services/chunker_service
+          args: --timeout=5m
+
+  # Summary job for branch protection
+  test-summary:
+    needs: [test-chunker, test-retrieval-mcp, lint-python, lint-go]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check test status
+        run: |
+          echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Test | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Chunker (Go) | ${{ needs.test-chunker.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Retrieval MCP (Python) | ${{ needs.test-retrieval-mcp.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Python Lint | ${{ needs.lint-python.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Go Lint | ${{ needs.lint-go.result == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
+          
+          # Fail if required tests failed
+          if [[ "${{ needs.test-chunker.result }}" == "failure" ]] || [[ "${{ needs.test-retrieval-mcp.result }}" == "failure" ]]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "❌ **Required tests failed**" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ All required tests passed" >> $GITHUB_STEP_SUMMARY
+

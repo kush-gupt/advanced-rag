@@ -39,7 +39,7 @@ func (c *SlidingWindowChunker) Chunk(
 		return nil, errors.New("overlap must be >= 0 and < window_size")
 	}
 
-	units := []string{}
+	var units []string
 	switch plan.Mode {
 	case ModeTokens:
 		units = strings.Fields(text)
