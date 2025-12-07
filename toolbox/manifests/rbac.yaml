@@ -59,7 +59,7 @@ subjects:
 ---
 # Additional permissions for Milvus deployment (via Helm)
 # Only apply this if NOT using SKIP_MILVUS=true
-# Includes permissions for bitnami/etcd and bitnami/minio subcharts
+# Includes permissions for bitnami/etcd, bitnami/minio, and pulsar subcharts
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -88,6 +88,10 @@ rules:
   - apiGroups: [""]
     resources: ["endpoints"]
     verbs: ["get", "list"]
+  # Roles/RoleBindings - Milvus Pulsar creates RBAC for its components
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "create", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
