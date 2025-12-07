@@ -52,8 +52,21 @@ check_prerequisites() {
 
 setup_namespace() {
     log "Using namespace: $NAMESPACE"
-    oc get namespace "$NAMESPACE" >/dev/null 2>&1 || error "Namespace '$NAMESPACE' does not exist. Create it first or set NAMESPACE to an existing namespace."
-    oc project "$NAMESPACE"
+    
+    # If running inside a pod, we're already in the namespace - just verify access
+    if [[ -f /var/run/secrets/kubernetes.io/serviceaccount/namespace ]]; then
+        local POD_NS=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
+        if [[ "$POD_NS" != "$NAMESPACE" ]]; then
+            warn "Running in namespace '$POD_NS' but NAMESPACE='$NAMESPACE'. Using '$POD_NS'."
+            NAMESPACE="$POD_NS"
+        fi
+        # Verify we have access by listing pods (uses our RBAC permissions)
+        oc get pods -n "$NAMESPACE" --no-headers >/dev/null 2>&1 || error "Cannot access namespace '$NAMESPACE'. Check RBAC permissions."
+    else
+        # Running locally - check namespace exists and switch to it
+        oc get namespace "$NAMESPACE" >/dev/null 2>&1 || error "Namespace '$NAMESPACE' does not exist. Create it first."
+        oc project "$NAMESPACE"
+    fi
 }
 
 create_secrets() {

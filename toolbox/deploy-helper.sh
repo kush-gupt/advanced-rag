@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-REPO_URL="${REPO_URL:-https://github.com/redhat-ai-services/advanced-rag.git}"
+REPO_URL="${REPO_URL:-https://github.com/kush-gupt/advanced-rag.git}"
 BRANCH="${BRANCH:-main}"
 
 log() { echo -e "\033[0;32m[INFO]\033[0m $1"; }
