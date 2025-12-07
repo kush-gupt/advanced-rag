@@ -141,6 +141,8 @@ def insert_chunks(
         rows.append(row)
 
     client.insert(collection_name=collection_name, data=rows)
+    # Flush to ensure data is immediately visible in stats and queries
+    client.flush(collection_name=collection_name)
 
 
 def hybrid_search(
