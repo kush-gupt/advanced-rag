@@ -125,8 +125,10 @@ deploy_milvus() {
     [[ "$SKIP_MILVUS" == "true" ]] && { warn "Skipping Milvus (SKIP_MILVUS=true)"; return; }
     
     log "Deploying Milvus..."
-    helm repo add zilliztech https://zilliztech.github.io/milvus-helm/ 2>/dev/null || true
-    helm repo update
+    log "  Adding Helm repo..."
+    helm repo add zilliztech https://zilliztech.github.io/milvus-helm/ || warn "Repo may already exist"
+    log "  Updating Helm repo..."
+    helm repo update zilliztech
     
     local HELM_ARGS=(
         --set cluster.enabled=false
