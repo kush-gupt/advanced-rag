@@ -51,24 +51,34 @@ A production-ready Retrieval-Augmented Generation (RAG) pipeline for OpenShift w
 
 ```bash
 oc login https://api.your-cluster.com:6443 --token=sha256~...
+oc new-project advanced-rag              # Namespace must exist before deploy
 export OPENAI_API_KEY="your-key"
-export OPENAI_API_BASE="your-llm-url"
+export OPENAI_BASE_URL="your-llm-url"    # Optional: custom LLM endpoint
 ./deploy.sh
 ```
 
-Deploys Milvus, all microservices, and MCP server to `advanced-rag` namespace.
+Deploys Milvus, all microservices, and MCP server to the `advanced-rag` namespace.
 
 **Options:**
 ```bash
-NAMESPACE=my-rag ./deploy.sh                       # Custom namespace
+NAMESPACE=my-rag ./deploy.sh                       # Custom namespace (must exist)
 SKIP_MILVUS=true ./deploy.sh                       # Use existing vector store
 EMBEDDING_API_KEY=... LLM_API_KEY=... ./deploy.sh  # Separate keys per service
 ```
 
 **No local tools?** Use the deployment toolbox:
 ```bash
+# 1. Setup namespace and RBAC
+export NAMESPACE=advanced-rag
+oc new-project $NAMESPACE
+oc apply -f toolbox/manifests/rbac.yaml -n $NAMESPACE
+
+# 2. Run the toolbox with the service account
 oc run toolbox --image=ghcr.io/kush-gupt/advanced-rag/toolbox:latest \
-  -it --rm --restart=Never --env="OPENAI_API_KEY=your-key" -- deploy-helper deploy
+  --overrides='{"spec":{"serviceAccountName":"toolbox"}}' \
+  -it --rm --restart=Never \
+  --env="OPENAI_API_KEY=your-key" --env="NAMESPACE=$NAMESPACE" \
+  -- deploy-helper deploy
 ```
 
 ## Project Structure

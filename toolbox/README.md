@@ -25,12 +25,11 @@ export NAMESPACE=advanced-rag
 
 # Apply namespace-scoped RBAC
 oc apply -f toolbox/manifests/rbac.yaml -n $NAMESPACE
-
-# Apply ClusterRoleBinding for route domain detection
-sed "s/REPLACE_WITH_NAMESPACE/$NAMESPACE/" toolbox/manifests/rbac.yaml | oc apply -n $NAMESPACE -f -
 ```
 
-> **Note:** The RBAC includes two roles: `toolbox-deployer` (required) and `toolbox-milvus` (only needed if deploying Milvus). If using `SKIP_MILVUS=true`, you can remove the milvus Role/RoleBinding.
+> **Note:** The RBAC includes two roles:
+> - `toolbox-deployer` — Required for all deployments
+> - `toolbox-milvus` — Only needed if deploying Milvus (skip with `SKIP_MILVUS=true`)
 
 ### Option 1: Run as a Pod (Recommended)
 
@@ -38,7 +37,7 @@ sed "s/REPLACE_WITH_NAMESPACE/$NAMESPACE/" toolbox/manifests/rbac.yaml | oc appl
 # Start the toolbox pod with the service account
 oc run toolbox \
   --image=ghcr.io/kush-gupt/advanced-rag/toolbox:latest \
-  --serviceaccount=toolbox \
+  --overrides='{"spec":{"serviceAccountName":"toolbox"}}' \
   -it --rm \
   --restart=Never \
   -- bash
@@ -55,7 +54,7 @@ export OPENAI_API_KEY="your-key"
 ```bash
 oc run toolbox \
   --image=ghcr.io/kush-gupt/advanced-rag/toolbox:latest \
-  --serviceaccount=toolbox \
+  --overrides='{"spec":{"serviceAccountName":"toolbox"}}' \
   -it --rm \
   --restart=Never \
   --env="OPENAI_API_KEY=your-key" \
@@ -133,7 +132,7 @@ For clusters without internet access:
    ```bash
    oc run toolbox \
      --image=registry.internal.example.com/advanced-rag/toolbox:latest \
-     --serviceaccount=toolbox \
+     --overrides='{"spec":{"serviceAccountName":"toolbox"}}' \
      -it --rm \
      -- bash
    ```

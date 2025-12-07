@@ -8,6 +8,7 @@ metadata:
     app.kubernetes.io/part-of: advanced-rag
 ---
 # Core permissions for deploying Advanced RAG services
+# Follows principle of least privilege - only permissions needed for kustomize apply
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -16,27 +17,27 @@ metadata:
     app.kubernetes.io/name: toolbox
     app.kubernetes.io/part-of: advanced-rag
 rules:
-  # Secrets - for API key secrets created by deploy.sh
+  # Secrets - for API key secrets (oc apply needs get+create+patch)
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["get", "create", "update", "patch"]
-  # ConfigMaps - used by services
+    verbs: ["get", "list", "create", "patch"]
+  # ConfigMaps - service configuration
   - apiGroups: [""]
     resources: ["configmaps"]
-    verbs: ["get", "create", "update", "patch"]
-  # Services - created by kustomize
+    verbs: ["get", "list", "create", "patch"]
+  # Services - expose deployments
   - apiGroups: [""]
     resources: ["services"]
-    verbs: ["get", "create", "update", "patch"]
-  # Deployments - created by kustomize, watched for readiness
+    verbs: ["get", "list", "create", "patch"]
+  # Deployments - main workloads (watch needed for oc wait)
   - apiGroups: ["apps"]
     resources: ["deployments"]
-    verbs: ["get", "list", "watch", "create", "update", "patch"]
-  # Routes - created by kustomize
+    verbs: ["get", "list", "watch", "create", "patch"]
+  # Routes - external access (OpenShift)
   - apiGroups: ["route.openshift.io"]
     resources: ["routes"]
-    verbs: ["get", "create", "update", "patch"]
-  # Pods - read-only for status checks (oc wait, oc get pods)
+    verbs: ["get", "list", "create", "patch"]
+  # Pods - read-only for status (oc wait, oc get pods)
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list", "watch"]
@@ -56,8 +57,9 @@ subjects:
   - kind: ServiceAccount
     name: toolbox
 ---
-# Additional permissions required for Milvus deployment (via Helm)
-# Only needed if SKIP_MILVUS is not set
+# Additional permissions for Milvus deployment (via Helm)
+# Only apply this if NOT using SKIP_MILVUS=true
+# Includes permissions for bitnami/etcd and bitnami/minio subcharts
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -66,18 +68,26 @@ metadata:
     app.kubernetes.io/name: toolbox
     app.kubernetes.io/part-of: advanced-rag
 rules:
-  # StatefulSets - etcd, minio components
+  # StatefulSets - etcd, minio, milvus standalone
   - apiGroups: ["apps"]
     resources: ["statefulsets"]
-    verbs: ["get", "list", "watch", "create", "update", "patch"]
-  # PVCs - storage for Milvus data
+    verbs: ["get", "list", "watch", "create", "patch"]
+  # ReplicaSets - read-only, managed by deployments (Helm needs to list)
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list"]
+  # PVCs - Milvus, etcd, minio storage
   - apiGroups: [""]
     resources: ["persistentvolumeclaims"]
-    verbs: ["get", "create", "update", "patch"]
-  # ServiceAccounts - Helm may create these
+    verbs: ["get", "list", "create", "patch"]
+  # ServiceAccounts - Helm charts create these
   - apiGroups: [""]
     resources: ["serviceaccounts"]
-    verbs: ["get", "create", "patch"]
+    verbs: ["get", "list", "create", "patch"]
+  # Endpoints - service discovery (auto-created but Helm may need to read)
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -93,32 +103,3 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: toolbox
----
-# Cluster-scoped read-only access for route domain detection
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: toolbox-cluster-reader
-  labels:
-    app.kubernetes.io/name: toolbox
-    app.kubernetes.io/part-of: advanced-rag
-rules:
-  - apiGroups: ["config.openshift.io"]
-    resources: ["ingresses"]
-    verbs: ["get"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: toolbox-cluster-reader
-  labels:
-    app.kubernetes.io/name: toolbox
-    app.kubernetes.io/part-of: advanced-rag
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: toolbox-cluster-reader
-subjects:
-  - kind: ServiceAccount
-    name: toolbox
-    namespace: REPLACE_WITH_NAMESPACE
