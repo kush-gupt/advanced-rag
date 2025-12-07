@@ -125,10 +125,18 @@ deploy_milvus() {
     [[ "$SKIP_MILVUS" == "true" ]] && { warn "Skipping Milvus (SKIP_MILVUS=true)"; return; }
     
     log "Deploying Milvus..."
-    log "  Adding Helm repo..."
-    helm repo add zilliztech https://zilliztech.github.io/milvus-helm/ || warn "Repo may already exist"
-    log "  Updating Helm repo..."
-    helm repo update zilliztech
+    
+    # Determine chart source: bundled chart or remote repo
+    local CHART_SOURCE="zilliztech/milvus"
+    if [[ -n "$MILVUS_CHART" && -f "$MILVUS_CHART" ]]; then
+        log "  Using bundled chart: $MILVUS_CHART"
+        CHART_SOURCE="$MILVUS_CHART"
+    else
+        log "  Adding Helm repo..."
+        helm repo add zilliztech https://zilliztech.github.io/milvus-helm/ || warn "Repo may already exist"
+        log "  Updating Helm repo..."
+        helm repo update zilliztech
+    fi
     
     local HELM_ARGS=(
         --set cluster.enabled=false
@@ -141,9 +149,9 @@ deploy_milvus() {
     )
     
     if helm status milvus -n "$NAMESPACE" >/dev/null 2>&1; then
-        helm upgrade milvus zilliztech/milvus "${HELM_ARGS[@]}" -n "$NAMESPACE"
+        helm upgrade milvus "$CHART_SOURCE" "${HELM_ARGS[@]}" -n "$NAMESPACE"
     else
-        helm install milvus zilliztech/milvus "${HELM_ARGS[@]}" -n "$NAMESPACE"
+        helm install milvus "$CHART_SOURCE" "${HELM_ARGS[@]}" -n "$NAMESPACE"
     fi
     
     log "Waiting for Milvus..."

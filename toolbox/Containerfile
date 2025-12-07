@@ -24,6 +24,14 @@ RUN curl -sL "https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz" \
 RUN curl -sL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" \
     | tar xz -C /usr/local/bin && chmod +x /usr/local/bin/kustomize
 
+# Pre-download Milvus Helm chart to avoid network issues at runtime
+ARG MILVUS_CHART_VERSION=4.2.20
+RUN mkdir -p /opt/helm-charts && \
+    curl -sL "https://github.com/zilliztech/milvus-helm/releases/download/milvus-${MILVUS_CHART_VERSION}/milvus-${MILVUS_CHART_VERSION}.tgz" \
+    -o /opt/helm-charts/milvus-${MILVUS_CHART_VERSION}.tgz && \
+    chmod 644 /opt/helm-charts/milvus-${MILVUS_CHART_VERSION}.tgz
+ENV MILVUS_CHART=/opt/helm-charts/milvus-${MILVUS_CHART_VERSION}.tgz
+
 RUN mkdir -p /workspace \
     /home/toolbox/.kube \
     /home/toolbox/.config/helm \
