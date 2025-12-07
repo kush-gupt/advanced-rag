@@ -24,10 +24,10 @@ The toolbox needs permissions to deploy resources within a namespace. A cluster 
 export NAMESPACE=advanced-rag
 
 # Apply namespace-scoped RBAC
-oc apply -f manifests/rbac.yaml -n $NAMESPACE
+oc apply -f toolbox/manifests/rbac.yaml -n $NAMESPACE
 
 # Apply ClusterRoleBinding for route domain detection
-sed "s/REPLACE_WITH_NAMESPACE/$NAMESPACE/" manifests/rbac.yaml | oc apply -f -
+sed "s/REPLACE_WITH_NAMESPACE/$NAMESPACE/" toolbox/manifests/rbac.yaml | oc apply -n $NAMESPACE -f -
 ```
 
 > **Note:** The RBAC includes two roles: `toolbox-deployer` (required) and `toolbox-milvus` (only needed if deploying Milvus). If using `SKIP_MILVUS=true`, you can remove the milvus Role/RoleBinding.
@@ -37,7 +37,7 @@ sed "s/REPLACE_WITH_NAMESPACE/$NAMESPACE/" manifests/rbac.yaml | oc apply -f -
 ```bash
 # Start the toolbox pod with the service account
 oc run toolbox \
-  --image=ghcr.io/redhat-ai-services/advanced-rag/toolbox:latest \
+  --image=ghcr.io/kush-gupt/advanced-rag/toolbox:latest \
   --serviceaccount=toolbox \
   -it --rm \
   --restart=Never \
@@ -54,7 +54,7 @@ export OPENAI_API_KEY="your-key"
 
 ```bash
 oc run toolbox \
-  --image=ghcr.io/redhat-ai-services/advanced-rag/toolbox:latest \
+  --image=ghcr.io/kush-gupt/advanced-rag/toolbox:latest \
   --serviceaccount=toolbox \
   -it --rm \
   --restart=Never \
@@ -68,7 +68,7 @@ oc run toolbox \
 # Pull and run locally
 podman run -it --rm \
   -e OPENAI_API_KEY="your-key" \
-  ghcr.io/redhat-ai-services/advanced-rag/toolbox:latest
+  ghcr.io/kush-gupt/advanced-rag/toolbox:latest
 
 # Inside container, log in and deploy
 oc login https://api.your-cluster.com:6443 --token=sha256~...
@@ -116,7 +116,7 @@ For clusters without internet access:
 1. **Mirror the toolbox image** to your internal registry:
    ```bash
    skopeo copy \
-     docker://ghcr.io/redhat-ai-services/advanced-rag/toolbox:latest \
+     docker://ghcr.io/kush-gupt/advanced-rag/toolbox:latest \
      docker://registry.internal.example.com/advanced-rag/toolbox:latest
    ```
 
@@ -124,7 +124,7 @@ For clusters without internet access:
    ```bash
    for svc in chunker-service embedding-service evaluator-service plan-service rerank-service vector-gateway retrieval-mcp; do
      skopeo copy \
-       docker://ghcr.io/redhat-ai-services/advanced-rag/${svc}:latest \
+       docker://ghcr.io/kush-gupt/advanced-rag/${svc}:latest \
        docker://registry.internal.example.com/advanced-rag/${svc}:latest
    done
    ```
