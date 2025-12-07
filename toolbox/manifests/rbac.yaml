@@ -57,9 +57,7 @@ subjects:
   - kind: ServiceAccount
     name: toolbox
 ---
-# Additional permissions for Milvus deployment (via Helm)
-# Only apply this if NOT using SKIP_MILVUS=true
-# Includes permissions for bitnami/etcd, bitnami/minio, and pulsar subcharts
+# Milvus deployment permissions (etcd, minio, standalone)
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -68,34 +66,12 @@ metadata:
     app.kubernetes.io/name: toolbox
     app.kubernetes.io/part-of: advanced-rag
 rules:
-  # StatefulSets - etcd, minio, milvus standalone
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims", "serviceaccounts"]
+    verbs: ["get", "list", "create", "patch"]
   - apiGroups: ["apps"]
     resources: ["statefulsets"]
     verbs: ["get", "list", "watch", "create", "patch"]
-  # ReplicaSets - read-only, managed by deployments (Helm needs to list)
-  - apiGroups: ["apps"]
-    resources: ["replicasets"]
-    verbs: ["get", "list"]
-  # PVCs - Milvus, etcd, minio storage
-  - apiGroups: [""]
-    resources: ["persistentvolumeclaims"]
-    verbs: ["get", "list", "create", "patch"]
-  # ServiceAccounts - Helm charts create these
-  - apiGroups: [""]
-    resources: ["serviceaccounts"]
-    verbs: ["get", "list", "create", "patch"]
-  # Endpoints - service discovery (auto-created but Helm may need to read)
-  - apiGroups: [""]
-    resources: ["endpoints"]
-    verbs: ["get", "list"]
-  # Roles/RoleBindings - Milvus Pulsar creates RBAC for its components
-  - apiGroups: ["rbac.authorization.k8s.io"]
-    resources: ["roles", "rolebindings"]
-    verbs: ["get", "list", "create", "patch"]
-  # Jobs - Milvus Pulsar creates init jobs (bookie-init, etc.)
-  - apiGroups: ["batch"]
-    resources: ["jobs"]
-    verbs: ["get", "list", "watch", "create", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

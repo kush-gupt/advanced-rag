@@ -140,20 +140,19 @@ deploy_milvus() {
     
     local HELM_ARGS=(
         --set cluster.enabled=false
-        --set standalone.messageQueue=rocksmq
-        # Single replica for etcd (dev/test, not HA)
+        --set standalone.messageQueue=woodpecker
+        --set woodpecker.enabled=true
+        --set streaming.enabled=true
+        --set pulsarv3.enabled=false
+        --set pulsar.enabled=false
         --set etcd.replicaCount=1
-        # Disable security contexts (OpenShift manages these)
         --set etcd.podSecurityContext.enabled=false
         --set etcd.containerSecurityContext.enabled=false
         --set etcd.volumePermissions.enabled=false
         --set minio.podSecurityContext.enabled=false
         --set minio.containerSecurityContext.enabled=false
-        # Disable SCC creation (requires cluster-admin)
         --set minio.securityContext.enabled=false
         --set minio.scc.create=false
-        # Disable pulsar (using rocksmq instead)
-        --set pulsar.enabled=false
     )
     
     if helm status milvus -n "$NAMESPACE" >/dev/null 2>&1; then
