@@ -141,6 +141,8 @@ deploy_milvus() {
     local HELM_ARGS=(
         --set cluster.enabled=false
         --set standalone.messageQueue=rocksmq
+        # Single replica for etcd (dev/test, not HA)
+        --set etcd.replicaCount=1
         # Disable security contexts (OpenShift manages these)
         --set etcd.podSecurityContext.enabled=false
         --set etcd.containerSecurityContext.enabled=false
