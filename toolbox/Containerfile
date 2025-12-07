@@ -9,7 +9,9 @@ ARG KUSTOMIZE_VERSION=5.4.3
 
 USER root
 
-RUN microdnf install -y git tar gzip jq findutils bash ca-certificates && microdnf clean all
+RUN microdnf install -y git tar gzip jq findutils bash ca-certificates && \
+    update-ca-trust && \
+    microdnf clean all
 
 WORKDIR /tmp
 
