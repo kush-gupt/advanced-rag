@@ -15,12 +15,30 @@ A container image with all CLI tools needed to deploy Advanced RAG to any OpenSh
 
 ## Quick Start
 
+### Prerequisites: RBAC Setup
+
+The toolbox needs permissions to deploy resources within a namespace. A cluster admin must first create the namespace and apply the RBAC:
+
+```bash
+# Set your target namespace
+export NAMESPACE=advanced-rag
+
+# Apply namespace-scoped RBAC
+oc apply -f manifests/rbac.yaml -n $NAMESPACE
+
+# Apply ClusterRoleBinding for route domain detection
+sed "s/REPLACE_WITH_NAMESPACE/$NAMESPACE/" manifests/rbac.yaml | oc apply -f -
+```
+
+> **Note:** The RBAC includes two roles: `toolbox-deployer` (required) and `toolbox-milvus` (only needed if deploying Milvus). If using `SKIP_MILVUS=true`, you can remove the milvus Role/RoleBinding.
+
 ### Option 1: Run as a Pod (Recommended)
 
 ```bash
-# Start the toolbox pod
+# Start the toolbox pod with the service account
 oc run toolbox \
   --image=ghcr.io/redhat-ai-services/advanced-rag/toolbox:latest \
+  --serviceaccount=toolbox \
   -it --rm \
   --restart=Never \
   -- bash
@@ -37,6 +55,7 @@ export OPENAI_API_KEY="your-key"
 ```bash
 oc run toolbox \
   --image=ghcr.io/redhat-ai-services/advanced-rag/toolbox:latest \
+  --serviceaccount=toolbox \
   -it --rm \
   --restart=Never \
   --env="OPENAI_API_KEY=your-key" \
@@ -114,6 +133,7 @@ For clusters without internet access:
    ```bash
    oc run toolbox \
      --image=registry.internal.example.com/advanced-rag/toolbox:latest \
+     --serviceaccount=toolbox \
      -it --rm \
      -- bash
    ```

@@ -6,7 +6,7 @@
 #   ./deploy.sh
 #
 # Environment Variables:
-#   NAMESPACE            Target namespace (default: advanced-rag)
+#   NAMESPACE            Target namespace (default: advanced-rag, must exist)
 #
 #   # Universal fallback
 #   OPENAI_API_KEY       Required: default API key for all services
@@ -51,8 +51,9 @@ check_prerequisites() {
 }
 
 setup_namespace() {
-    log "Setting up namespace: $NAMESPACE"
-    oc new-project "$NAMESPACE" 2>/dev/null || oc project "$NAMESPACE"
+    log "Using namespace: $NAMESPACE"
+    oc get namespace "$NAMESPACE" >/dev/null 2>&1 || error "Namespace '$NAMESPACE' does not exist. Create it first or set NAMESPACE to an existing namespace."
+    oc project "$NAMESPACE"
 }
 
 create_secrets() {

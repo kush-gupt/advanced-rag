@@ -1,0 +1,124 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: toolbox
+  labels:
+    app.kubernetes.io/name: toolbox
+    app.kubernetes.io/part-of: advanced-rag
+---
+# Core permissions for deploying Advanced RAG services
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: toolbox-deployer
+  labels:
+    app.kubernetes.io/name: toolbox
+    app.kubernetes.io/part-of: advanced-rag
+rules:
+  # Secrets - for API key secrets created by deploy.sh
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "update", "patch"]
+  # ConfigMaps - used by services
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "create", "update", "patch"]
+  # Services - created by kustomize
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "create", "update", "patch"]
+  # Deployments - created by kustomize, watched for readiness
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  # Routes - created by kustomize
+  - apiGroups: ["route.openshift.io"]
+    resources: ["routes"]
+    verbs: ["get", "create", "update", "patch"]
+  # Pods - read-only for status checks (oc wait, oc get pods)
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: toolbox-deployer
+  labels:
+    app.kubernetes.io/name: toolbox
+    app.kubernetes.io/part-of: advanced-rag
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: toolbox-deployer
+subjects:
+  - kind: ServiceAccount
+    name: toolbox
+---
+# Additional permissions required for Milvus deployment (via Helm)
+# Only needed if SKIP_MILVUS is not set
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: toolbox-milvus
+  labels:
+    app.kubernetes.io/name: toolbox
+    app.kubernetes.io/part-of: advanced-rag
+rules:
+  # StatefulSets - etcd, minio components
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  # PVCs - storage for Milvus data
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "create", "update", "patch"]
+  # ServiceAccounts - Helm may create these
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: toolbox-milvus
+  labels:
+    app.kubernetes.io/name: toolbox
+    app.kubernetes.io/part-of: advanced-rag
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: toolbox-milvus
+subjects:
+  - kind: ServiceAccount
+    name: toolbox
+---
+# Cluster-scoped read-only access for route domain detection
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: toolbox-cluster-reader
+  labels:
+    app.kubernetes.io/name: toolbox
+    app.kubernetes.io/part-of: advanced-rag
+rules:
+  - apiGroups: ["config.openshift.io"]
+    resources: ["ingresses"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: toolbox-cluster-reader
+  labels:
+    app.kubernetes.io/name: toolbox
+    app.kubernetes.io/part-of: advanced-rag
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: toolbox-cluster-reader
+subjects:
+  - kind: ServiceAccount
+    name: toolbox
+    namespace: REPLACE_WITH_NAMESPACE
