@@ -145,10 +145,13 @@ deploy_milvus() {
         --set streaming.enabled=true
         --set pulsarv3.enabled=false
         --set pulsar.enabled=false
+        --set standalone.persistence.size=20Gi
         --set etcd.replicaCount=1
+        --set etcd.persistence.size=10Gi
         --set etcd.podSecurityContext.enabled=false
         --set etcd.containerSecurityContext.enabled=false
         --set etcd.volumePermissions.enabled=false
+        --set minio.persistence.size=50Gi
         --set minio.podSecurityContext.enabled=false
         --set minio.containerSecurityContext.enabled=false
         --set minio.securityContext.enabled=false

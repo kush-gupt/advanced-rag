@@ -24,7 +24,7 @@ minio:
   mode: standalone
   persistence:
     enabled: true
-    size: 20Gi
+    size: 50Gi
 
 # Disable Pulsar/Kafka messaging (not needed for standalone)
 pulsar:
@@ -56,6 +56,8 @@ containerSecurityContext:
 
 # Resource limits (adjust based on workload)
 standalone:
+  persistence:
+    size: 20Gi
   resources:
     requests:
       cpu: "1"
