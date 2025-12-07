@@ -22,11 +22,13 @@ RUN curl -sL "https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz" \
 RUN curl -sL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" \
     | tar xz -C /usr/local/bin && chmod +x /usr/local/bin/kustomize
 
-RUN mkdir -p /workspace && chmod 777 /workspace
+RUN mkdir -p /workspace /home/toolbox/.kube && \
+    chmod 777 /workspace /home/toolbox /home/toolbox/.kube
 WORKDIR /workspace
 
 COPY --chmod=755 deploy-helper.sh /usr/local/bin/deploy-helper
 
 USER 1001
+ENV HOME=/home/toolbox
 
 CMD ["/bin/bash"]
