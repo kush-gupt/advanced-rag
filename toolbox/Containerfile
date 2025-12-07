@@ -25,7 +25,7 @@ RUN curl -sL "https://github.com/kubernetes-sigs/kustomize/releases/download/kus
     | tar xz -C /usr/local/bin && chmod +x /usr/local/bin/kustomize
 
 # Pre-download Milvus Helm chart to avoid network issues at runtime
-ARG MILVUS_CHART_VERSION=4.2.20
+ARG MILVUS_CHART_VERSION=5.0.10
 RUN mkdir -p /opt/helm-charts && \
     curl -sL "https://github.com/zilliztech/milvus-helm/releases/download/milvus-${MILVUS_CHART_VERSION}/milvus-${MILVUS_CHART_VERSION}.tgz" \
     -o /opt/helm-charts/milvus-${MILVUS_CHART_VERSION}.tgz && \
