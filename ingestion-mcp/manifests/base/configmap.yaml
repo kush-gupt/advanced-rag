@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ingestion-mcp-config
+data:
+  VECTOR_GATEWAY_URL: "http://vector-gateway:8080"
+  CHUNKER_SERVICE_URL: "http://chunker-service:8080"
+  DEFAULT_COLLECTION: "rag_gateway"
+

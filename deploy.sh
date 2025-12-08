@@ -186,7 +186,11 @@ deploy_mcp() {
     
     log "Deploying retrieval-mcp..."
     kustomize build "$SCRIPT_DIR/retrieval-mcp/manifests/overlays/ghcr" | oc apply -n "$NAMESPACE" -f -
-    oc wait --for=condition=Available deployment/retrieval-mcp -n "$NAMESPACE" --timeout=120s || warn "MCP not ready"
+    
+    log "Deploying ingestion-mcp..."
+    kustomize build "$SCRIPT_DIR/ingestion-mcp/manifests/overlays/ghcr" | oc apply -n "$NAMESPACE" -f -
+    
+    oc wait --for=condition=Available deployment/retrieval-mcp deployment/ingestion-mcp -n "$NAMESPACE" --timeout=120s || warn "MCP servers not ready"
 }
 
 show_status() {
@@ -197,6 +201,7 @@ show_status() {
     local DOMAIN=$(oc get ingresses.config/cluster -o jsonpath='{.spec.domain}' 2>/dev/null || echo "apps.example.com")
     echo "Routes: https://{vector-gateway,embedding-service,rerank-service,plan-service,evaluator-service,chunker-service}-${NAMESPACE}.${DOMAIN}"
     echo "MCP:    https://retrieval-mcp-${NAMESPACE}.${DOMAIN}/mcp/"
+    echo "        https://ingestion-mcp-${NAMESPACE}.${DOMAIN}/mcp/"
 }
 
 main() {

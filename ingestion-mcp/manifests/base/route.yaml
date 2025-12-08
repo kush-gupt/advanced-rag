@@ -1,0 +1,15 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: ingestion-mcp
+spec:
+  path: /mcp/
+  to:
+    kind: Service
+    name: ingestion-mcp
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+

@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingestion-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ingestion-mcp
+  template:
+    metadata:
+      labels:
+        app: ingestion-mcp
+    spec:
+      containers:
+        - name: ingestion-mcp
+          image: ingestion-mcp:latest
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: MCP_TRANSPORT
+              value: "http"
+            - name: MCP_HTTP_HOST
+              value: "0.0.0.0"
+            - name: MCP_HTTP_PORT
+              value: "8080"
+            - name: MCP_HTTP_PATH
+              value: "/mcp/"
+          envFrom:
+            - configMapRef:
+                name: ingestion-mcp-config
+                optional: true
+          resources:
+            requests:
+              cpu: "100m"
+              memory: 256Mi
+            limits:
+              cpu: "500m"
+              memory: 512Mi
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              drop:
+                - ALL
+      restartPolicy: Always
+
