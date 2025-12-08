@@ -10,11 +10,12 @@ FROM registry.access.redhat.com/ubi9/python-311:latest AS builder
 
 USER 0
 
-# Install caikit-nlp for bootstrapping
+# Install PyTorch CPU version first, then caikit-nlp from PyPI
 RUN pip install --no-cache-dir \
-    caikit-nlp>=0.5.0 \
-    sentence-transformers \
-    torch --index-url https://download.pytorch.org/whl/cpu
+    torch --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir \
+    caikit-nlp \
+    sentence-transformers
 
 # Set model configuration
 ENV MODEL_NAME="cross-encoder/ms-marco-MiniLM-L12-v2"
