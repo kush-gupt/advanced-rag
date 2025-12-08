@@ -20,11 +20,21 @@ MANIFEST_DIR := manifests
 help:
 	@echo "Caikit Model Deployment"
 	@echo ""
-	@echo "DEPLOYMENT TARGETS (run from OpenShift client machine):"
+	@echo "DEPLOYMENT TARGETS (S3 storage - run from OpenShift client machine):"
 	@echo "  make deploy-minilm      Deploy all-MiniLM-L6-v2 embedding (384 dims)"
 	@echo "  make deploy-granite     Deploy Granite embedding 278M (768 dims)"
 	@echo "  make deploy-reranker    Deploy MS-MARCO MiniLM reranker"
 	@echo "  make deploy-all         Deploy all three models"
+	@echo ""
+	@echo "DEPLOYMENT TARGETS (OCI Modelcar - no S3 required):"
+	@echo "  make deploy-minilm-oci  Deploy MiniLM using OCI modelcar"
+	@echo "  make deploy-reranker-oci Deploy reranker using OCI modelcar"
+	@echo "  make deploy-all-oci     Deploy MiniLM + reranker using OCI modelcars"
+	@echo ""
+	@echo "MODELCAR BUILD TARGETS (local build):"
+	@echo "  make build-minilm-modelcar   Build MiniLM modelcar image locally"
+	@echo "  make build-reranker-modelcar Build reranker modelcar image locally"
+	@echo "  make build-all-modelcars     Build all modelcar images locally"
 	@echo ""
 	@echo "INFRASTRUCTURE TARGETS:"
 	@echo "  make setup-namespace    Create namespace and apply base resources"
@@ -33,7 +43,7 @@ help:
 	@echo "  make logs-granite       Show logs for Granite deployment"
 	@echo "  make logs-reranker      Show logs for reranker deployment"
 	@echo ""
-	@echo "BOOTSTRAP TARGETS (run in OpenShift AI Workbench):"
+	@echo "BOOTSTRAP TARGETS (run in OpenShift AI Workbench - for S3 method):"
 	@echo "  make bootstrap-minilm   Bootstrap MiniLM model from HuggingFace"
 	@echo "  make bootstrap-granite  Bootstrap Granite model from HuggingFace"
 	@echo "  make bootstrap-reranker Bootstrap MS-MARCO reranker from HuggingFace"
@@ -57,6 +67,7 @@ help:
 	@echo ""
 	@echo "OPTIONS:"
 	@echo "  NAMESPACE=<ns>          Override default namespace (default: caikit-embeddings)"
+	@echo "  REGISTRY_OWNER=<owner>  GitHub org/user for modelcar images (required for OCI deploy)"
 
 # =============================================================================
 # INFRASTRUCTURE
@@ -109,6 +120,70 @@ deploy-reranker: setup-namespace
 deploy-all: deploy-minilm deploy-granite deploy-reranker
 	@echo ""
 	@echo "All models deployed. Check status with: make status"
+
+# =============================================================================
+# OCI MODELCAR DEPLOYMENT TARGETS (no S3 required)
+# =============================================================================
+
+REGISTRY_OWNER ?= REGISTRY_OWNER
+MODELCAR_DIR := modelcars
+
+.PHONY: deploy-minilm-oci
+deploy-minilm-oci: setup-namespace
+	@echo "Deploying all-MiniLM-L6-v2 using OCI modelcar..."
+	@./deploy-minilm-oci.sh $(NAMESPACE) $(REGISTRY_OWNER)
+
+.PHONY: deploy-reranker-oci
+deploy-reranker-oci: setup-namespace
+	@echo "Deploying MS-MARCO Reranker using OCI modelcar..."
+	@./deploy-reranker-oci.sh $(NAMESPACE) $(REGISTRY_OWNER)
+
+.PHONY: deploy-all-oci
+deploy-all-oci: deploy-minilm-oci deploy-reranker-oci
+	@echo ""
+	@echo "All OCI-based models deployed. Check status with: make status"
+
+# =============================================================================
+# MODELCAR BUILD TARGETS (local build with podman/docker)
+# =============================================================================
+
+CONTAINER_ENGINE ?= $(shell command -v podman 2>/dev/null || echo docker)
+MODELCAR_REGISTRY ?= ghcr.io/$(REGISTRY_OWNER)/advanced-rag
+
+.PHONY: build-minilm-modelcar
+build-minilm-modelcar:
+	@echo "Building MiniLM embedding modelcar..."
+	@echo "This may take several minutes to download and convert the model."
+	$(CONTAINER_ENGINE) build -t $(MODELCAR_REGISTRY)/minilm-embedding-modelcar:latest \
+		$(MODELCAR_DIR)/minilm-embedding
+
+.PHONY: build-reranker-modelcar
+build-reranker-modelcar:
+	@echo "Building reranker modelcar..."
+	@echo "This may take several minutes to download and convert the model."
+	$(CONTAINER_ENGINE) build -t $(MODELCAR_REGISTRY)/reranker-modelcar:latest \
+		$(MODELCAR_DIR)/reranker
+
+.PHONY: build-all-modelcars
+build-all-modelcars: build-minilm-modelcar build-reranker-modelcar
+	@echo ""
+	@echo "All modelcars built. Push with:"
+	@echo "  $(CONTAINER_ENGINE) push $(MODELCAR_REGISTRY)/minilm-embedding-modelcar:latest"
+	@echo "  $(CONTAINER_ENGINE) push $(MODELCAR_REGISTRY)/reranker-modelcar:latest"
+
+.PHONY: push-minilm-modelcar
+push-minilm-modelcar:
+	@echo "Pushing MiniLM modelcar..."
+	$(CONTAINER_ENGINE) push $(MODELCAR_REGISTRY)/minilm-embedding-modelcar:latest
+
+.PHONY: push-reranker-modelcar
+push-reranker-modelcar:
+	@echo "Pushing reranker modelcar..."
+	$(CONTAINER_ENGINE) push $(MODELCAR_REGISTRY)/reranker-modelcar:latest
+
+.PHONY: push-all-modelcars
+push-all-modelcars: push-minilm-modelcar push-reranker-modelcar
+	@echo "All modelcars pushed."
 
 # =============================================================================
 # BOOTSTRAP TARGETS (run in OpenShift AI Workbench)

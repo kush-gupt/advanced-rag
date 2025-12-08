@@ -1,0 +1,56 @@
+# OCI Modelcar for all-MiniLM-L6-v2 Embedding Model
+#
+# This builds a container image containing the MiniLM embedding model
+# pre-converted to Caikit format. Use with KServe OCI storage instead of S3.
+#
+# Build: podman build -t ghcr.io/your-org/minilm-embedding-modelcar:latest .
+# Size: ~500MB (model weights + tokenizer)
+
+FROM registry.access.redhat.com/ubi9/python-311:latest AS builder
+
+USER 0
+
+# Install caikit-nlp for bootstrapping
+RUN pip install --no-cache-dir \
+    caikit-nlp>=0.5.0 \
+    sentence-transformers \
+    torch --index-url https://download.pytorch.org/whl/cpu
+
+# Set model configuration
+ENV MODEL_NAME="sentence-transformers/all-MiniLM-L6-v2"
+ENV MODEL_OUTPUT_NAME="all-minilm-l6-v2"
+
+# Bootstrap script to download and convert model
+RUN python3 -c "\
+import os; \
+from caikit_nlp.modules.text_embedding import EmbeddingModule; \
+print(f'Bootstrapping {os.environ[\"MODEL_NAME\"]}...'); \
+model = EmbeddingModule.bootstrap(os.environ['MODEL_NAME']); \
+output_dir = f'/models/{os.environ[\"MODEL_OUTPUT_NAME\"]}'; \
+os.makedirs(os.path.dirname(output_dir), exist_ok=True); \
+model.save(output_dir); \
+print(f'Model saved to {output_dir}')"
+
+# Verify model structure
+RUN echo "Model structure:" && find /models -type f | head -20
+
+# -----------------------------------------------------------------------------
+# Final minimal image with just the model files
+# -----------------------------------------------------------------------------
+FROM registry.access.redhat.com/ubi9/ubi-micro:latest
+
+# Copy only the model files (no Python runtime needed in modelcar)
+COPY --from=builder /models /models
+
+# Set permissions for OpenShift
+USER 1001
+
+# Labels for model identification
+LABEL io.kserve.model.name="all-minilm-l6-v2" \
+      io.kserve.model.format="caikit" \
+      io.kserve.model.source="sentence-transformers/all-MiniLM-L6-v2" \
+      io.kserve.model.type="embedding" \
+      io.kserve.model.dimensions="384" \
+      org.opencontainers.image.title="MiniLM Embedding Modelcar" \
+      org.opencontainers.image.description="Caikit-format embedding model for KServe OCI storage"
+

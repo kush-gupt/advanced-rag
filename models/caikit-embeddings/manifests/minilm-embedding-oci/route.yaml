@@ -1,0 +1,19 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: all-minilm-l6-v2
+  namespace: caikit-embeddings
+  labels:
+    app: all-minilm-l6-v2
+spec:
+  to:
+    kind: Service
+    name: all-minilm-l6-v2-svc
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None
+

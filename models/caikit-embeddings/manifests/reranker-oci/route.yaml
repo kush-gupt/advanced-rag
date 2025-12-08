@@ -1,0 +1,19 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: ms-marco-reranker
+  namespace: caikit-embeddings
+  labels:
+    app: ms-marco-reranker
+spec:
+  to:
+    kind: Service
+    name: ms-marco-reranker-svc
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None
+

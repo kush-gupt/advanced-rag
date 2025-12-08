@@ -1,0 +1,37 @@
+# InferenceService for MS-MARCO Reranker using OCI Modelcar
+#
+# This uses an OCI container image as model storage instead of S3.
+# No data-connection secret or S3 bucket required.
+#
+# Prerequisites:
+#   - ServingRuntime deployed (manifests/base/serving-runtime.yaml)
+#   - Modelcar image available at the storageUri
+#
+# Update REGISTRY_OWNER below to match your GitHub org/user
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: ms-marco-reranker
+  namespace: caikit-embeddings
+  annotations:
+    openshift.io/display-name: MS MARCO Reranker (OCI)
+    serving.kserve.io/deploymentMode: RawDeployment
+  labels:
+    opendatahub.io/dashboard: "true"
+spec:
+  predictor:
+    model:
+      modelFormat:
+        name: caikit
+      runtime: caikit-standalone-runtime
+      # OCI modelcar storage - no S3 required
+      # Update the registry owner to match your GitHub org/user
+      storageUri: oci://ghcr.io/REGISTRY_OWNER/advanced-rag/reranker-modelcar:latest
+    resources:
+      requests:
+        cpu: "1"
+        memory: 2Gi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+

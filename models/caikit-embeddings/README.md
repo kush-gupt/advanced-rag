@@ -4,24 +4,46 @@ This directory contains deployment configuration for self-hosted embedding and r
 
 **Namespace**: `caikit-embeddings`
 
+## Storage Options
+
+This project supports two deployment methods:
+
+| Method | Best For | Prerequisites |
+|--------|----------|---------------|
+| **OCI Modelcar** (Recommended) | Quick setup, no S3 needed | GitHub Container Registry access |
+| **S3 Storage** | Production, custom models | Noobaa/S3 bucket, data connection |
+
 ## Deployed Models
 
-| Model | Type | Parameters | Dimensions | Max Tokens | Endpoint |
-|-------|------|------------|------------|------------|----------|
-| `ibm-granite/granite-embedding-278m-multilingual` | Embedding | 278M | 768 | 512 | `https://granite-embedding-278m-caikit-embeddings.apps.cluster-mqwwr.mqwwr.sandbox1259.opentlc.com` |
-| `sentence-transformers/all-MiniLM-L6-v2` | Embedding | 22.7M | 384 | 256 | `https://all-minilm-l6-v2-caikit-embeddings.apps.cluster-mqwwr.mqwwr.sandbox1259.opentlc.com` |
-| `cross-encoder/ms-marco-MiniLM-L12-v2` | Cross-Encoder | 33.4M | N/A | 512 | `https://ms-marco-reranker-caikit-embeddings.apps.cluster-mqwwr.mqwwr.sandbox1259.opentlc.com` |
+| Model | Type | Parameters | Dimensions | Max Tokens |
+|-------|------|------------|------------|------------|
+| `sentence-transformers/all-MiniLM-L6-v2` | Embedding | 22.7M | 384 | 256 |
+| `cross-encoder/ms-marco-MiniLM-L12-v2` | Cross-Encoder | 33.4M | N/A | 512 |
+| `ibm-granite/granite-embedding-278m-multilingual` | Embedding | 278M | 768 | 512 |
 
 ## Architecture
 
+### Option A: OCI Modelcar (Recommended)
+
 ```
-                                     Noobaa S3
-                                   (Model Store)
-                                        |
-                                        v
++------------------+     +-------------------+     +------------------+
+|  GitHub Actions  |---->|   Container       |---->|   OCI Registry   |
+|  (Build modelcar)|     |   (Model files)   |     |   (ghcr.io)      |
++------------------+     +-------------------+     +------------------+
+                                                          |
+                                                          v
+                         +-------------------+     +------------------+
+                         |   Caikit Runtime  |<----|   KServe         |
+                         |   (OpenShift AI)  |     |   (pulls image)  |
+                         +-------------------+     +------------------+
+```
+
+### Option B: S3 Storage
+
+```
 +----------------+     +-------------------+     +------------------+
-|   Workbench    |---->|   Caikit Runtime  |---->|   Inference      |
-|  (Bootstrap)   |     |   (OpenShift AI)  |     |   Endpoint       |
+|   Workbench    |---->|   Noobaa S3       |---->|   Caikit Runtime |
+|  (Bootstrap)   |     |   (Model Store)   |     |   (OpenShift AI) |
 +----------------+     +-------------------+     +------------------+
 ```
 
@@ -30,11 +52,18 @@ This directory contains deployment configuration for self-hosted embedding and r
 ```
 caikit-embeddings/
 ├── README.md                    # This file
-├── Makefile                     # make deploy-minilm, deploy-granite, etc.
-├── deploy-granite-embedding.sh  # Per-model deployment scripts
+├── Makefile                     # make deploy-minilm-oci, deploy-reranker-oci, etc.
+├── deploy-minilm-oci.sh         # OCI modelcar deployment (no S3)
+├── deploy-reranker-oci.sh
+├── deploy-granite-embedding.sh  # S3-based deployment scripts
 ├── deploy-minilm-embedding.sh
 ├── deploy-reranker.sh
-├── scripts/                     # Bootstrap and upload scripts (run in Workbench)
+├── modelcars/                   # OCI modelcar Containerfiles
+│   ├── minilm-embedding/
+│   │   └── Containerfile
+│   └── reranker/
+│       └── Containerfile
+├── scripts/                     # Bootstrap and upload scripts (for S3 method)
 │   ├── bootstrap_granite_embedding.py
 │   ├── bootstrap_minilm_embedding.py
 │   ├── bootstrap_reranker.py
@@ -45,14 +74,24 @@ caikit-embeddings/
     ├── base/                    # Shared resources
     │   ├── data-connection-secret.yaml
     │   └── serving-runtime.yaml
-    ├── granite-embedding/       # Granite embedding model
+    ├── minilm-embedding-oci/    # MiniLM with OCI storage (no S3)
+    │   ├── inference-service.yaml
+    │   ├── service.yaml
+    │   ├── route.yaml
+    │   └── kustomization.yaml
+    ├── reranker-oci/            # Reranker with OCI storage (no S3)
+    │   ├── inference-service.yaml
+    │   ├── service.yaml
+    │   ├── route.yaml
+    │   └── kustomization.yaml
+    ├── granite-embedding/       # Granite embedding (S3 storage)
     │   ├── inference-service.yaml
     │   └── route.yaml
-    ├── minilm-embedding/        # MiniLM embedding model
+    ├── minilm-embedding/        # MiniLM embedding (S3 storage)
     │   ├── inference-service.yaml
     │   ├── service.yaml
     │   └── route.yaml
-    └── reranker/                # MS-Marco reranker
+    └── reranker/                # MS-Marco reranker (S3 storage)
         ├── inference-service.yaml
         ├── service.yaml
         └── route.yaml
@@ -101,9 +140,57 @@ s3://model-storage-.../
 The `storage.path` in InferenceService is the parent folder (`granite-models`), not the model folder.
 Each InferenceService uses a separate parent folder to avoid loading unrelated models.
 
-## Quick Start with Makefile
+## Quick Start: OCI Modelcar (Recommended)
 
-The easiest way to deploy models is using the Makefile:
+The OCI modelcar approach packages models as container images, eliminating the need for S3 storage setup.
+
+### Option 1: Use Pre-built Images (GitHub Actions)
+
+The modelcar images are automatically built by GitHub Actions when changes are pushed to main:
+
+```bash
+# Images are available at:
+# ghcr.io/<your-org>/advanced-rag/minilm-embedding-modelcar:latest
+# ghcr.io/<your-org>/advanced-rag/reranker-modelcar:latest
+
+# Deploy using OCI modelcars (no S3 required!)
+make deploy-minilm-oci REGISTRY_OWNER=your-github-org
+make deploy-reranker-oci REGISTRY_OWNER=your-github-org
+
+# Or deploy both at once
+make deploy-all-oci REGISTRY_OWNER=your-github-org
+
+# Check status
+make status
+
+# Test endpoints
+make test-minilm
+make test-reranker
+```
+
+### Option 2: Build Modelcars Locally
+
+```bash
+# Build modelcar images locally (takes ~10 min per model)
+make build-minilm-modelcar REGISTRY_OWNER=your-github-org
+make build-reranker-modelcar REGISTRY_OWNER=your-github-org
+
+# Push to registry
+make push-all-modelcars REGISTRY_OWNER=your-github-org
+
+# Deploy
+make deploy-all-oci REGISTRY_OWNER=your-github-org
+```
+
+### Trigger GitHub Actions Build Manually
+
+Go to **Actions → Build Modelcars → Run workflow** to trigger a manual build.
+
+---
+
+## Quick Start: S3 Storage (Alternative)
+
+If you prefer S3 storage or need to deploy custom/fine-tuned models:
 
 ```bash
 # See all available targets
@@ -125,7 +212,29 @@ make test-minilm
 make test-all
 ```
 
-## Full Deployment Steps
+## GitHub Actions: Automatic Modelcar Builds
+
+The `.github/workflows/build-modelcars.yaml` workflow automatically builds and pushes modelcar images:
+
+**Triggers:**
+- Push to `main` with changes in `models/caikit-embeddings/modelcars/`
+- Manual trigger via workflow_dispatch
+- Tagged releases with `modelcar-v*` pattern
+
+**Images Built:**
+- `ghcr.io/<org>/advanced-rag/minilm-embedding-modelcar:latest`
+- `ghcr.io/<org>/advanced-rag/reranker-modelcar:latest`
+
+**To trigger manually:**
+1. Go to **Actions** → **Build Modelcars**
+2. Click **Run workflow**
+3. Select model to build (or "all")
+
+---
+
+## Full Deployment Steps (S3 Method)
+
+> **Note:** Skip this section if using OCI modelcars. See [Quick Start: OCI Modelcar](#quick-start-oci-modelcar-recommended) instead.
 
 ### 1. Bootstrap Model in OpenShift AI Workbench
 
