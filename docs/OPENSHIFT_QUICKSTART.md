@@ -7,15 +7,17 @@ Deploy the complete Advanced RAG pipeline to OpenShift using pre-built container
 Run the deployment toolbox directly in your cluster—no local tools required:
 
 ```bash
-oc run toolbox \
-  --image=ghcr.io/kush-gupt/advanced-rag/toolbox:latest \
-  -it --rm --restart=Never -- bash
+# 1. Create namespace and RBAC
+export NAMESPACE=advanced-rag
+oc new-project $NAMESPACE
+oc apply -f https://raw.githubusercontent.com/kush-gupt/advanced-rag/main/toolbox/manifests/rbac.yaml -n $NAMESPACE
 
-# Inside the toolbox:
-git clone https://github.com/kush-gupt/advanced-rag.git
-cd advanced-rag
-export OPENAI_API_KEY="your-key"
-./deploy.sh
+# 2. Run the toolbox with the service account
+oc run toolbox --image=ghcr.io/kush-gupt/advanced-rag/toolbox:latest \
+  --overrides='{"spec":{"serviceAccountName":"toolbox"}}' \
+  -it --rm --restart=Never \
+  --env="OPENAI_API_KEY=your-key" --env="NAMESPACE=$NAMESPACE" \
+  -- deploy-helper deploy
 ```
 
 ## Option 2: Web Terminal
@@ -127,12 +129,22 @@ helm repo add zilliztech https://zilliztech.github.io/milvus-helm/ && helm repo 
 
 helm install milvus zilliztech/milvus \
   --set cluster.enabled=false \
+  --set standalone.messageQueue=woodpecker \
+  --set woodpecker.enabled=true \
+  --set streaming.enabled=true \
+  --set pulsarv3.enabled=false \
+  --set pulsar.enabled=false \
+  --set standalone.persistence.size=20Gi \
+  --set etcd.replicaCount=1 \
+  --set etcd.persistence.size=10Gi \
   --set etcd.podSecurityContext.enabled=false \
   --set etcd.containerSecurityContext.enabled=false \
   --set etcd.volumePermissions.enabled=false \
+  --set minio.persistence.size=50Gi \
   --set minio.podSecurityContext.enabled=false \
   --set minio.containerSecurityContext.enabled=false \
-  --set standalone.messageQueue=rocksmq \
+  --set minio.securityContext.enabled=false \
+  --set minio.scc.create=false \
   -n $NAMESPACE
 
 oc wait --for=condition=Ready pods -l app.kubernetes.io/name=milvus -n $NAMESPACE --timeout=300s
@@ -144,10 +156,11 @@ oc wait --for=condition=Ready pods -l app.kubernetes.io/name=milvus -n $NAMESPAC
 cd services && make deploy-all NAMESPACE=$NAMESPACE && cd ..
 ```
 
-### 5. Deploy MCP Server
+### 5. Deploy MCP Servers
 
 ```bash
 kustomize build retrieval-mcp/manifests/overlays/ghcr | oc apply -n $NAMESPACE -f -
+kustomize build ingestion-mcp/manifests/overlays/ghcr | oc apply -n $NAMESPACE -f -
 ```
 
 ### 6. Verify
@@ -172,6 +185,7 @@ echo "Vector Gateway: https://vector-gateway-${NAMESPACE}.${CLUSTER_DOMAIN}"
 | Evaluator Service | `https://evaluator-service-$NAMESPACE.$CLUSTER_DOMAIN` |
 | Chunker Service | `https://chunker-service-$NAMESPACE.$CLUSTER_DOMAIN` |
 | Retrieval MCP | `https://retrieval-mcp-$NAMESPACE.$CLUSTER_DOMAIN/mcp/` |
+| Ingestion MCP | `https://ingestion-mcp-$NAMESPACE.$CLUSTER_DOMAIN/mcp/` |
 
 ## Test
 
@@ -213,3 +227,4 @@ oc delete project $NAMESPACE
 | rerank-service | `ghcr.io/kush-gupt/advanced-rag/rerank-service:latest` |
 | vector-gateway | `ghcr.io/kush-gupt/advanced-rag/vector-gateway:latest` |
 | retrieval-mcp | `ghcr.io/kush-gupt/advanced-rag/retrieval-mcp:latest` |
+| ingestion-mcp | `ghcr.io/kush-gupt/advanced-rag/ingestion-mcp:latest` |
